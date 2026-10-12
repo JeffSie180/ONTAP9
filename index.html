@@ -1,0 +1,1306 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ONTAP 儲存架構與資料保護</title>
+<meta name="description" content="以三維模型互動導覽 NetApp ONTAP：disk、local tier、node 與 HA pair、cluster、SVM、LIF、volume、qtree／LUN，以及 Snapshot、SnapMirror 資料保護與異地復原流程。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --sans:"Inter","Noto Sans TC","Noto Sans CJK TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --mono:"IBM Plex Mono","Noto Sans TC",ui-monospace,monospace;
+  --bg:#FFFFFF; --ink:#0A0A0A; --ink2:#4B4F54; --ink3:#868B91;
+  --rule:rgba(10,10,10,.12); --btn:rgba(255,255,255,.85); --card:#F4F6F9;
+  --brand:#0067C5; --brand2:#00A3E0; --on-brand:#FFFFFF;
+  --ok:#00A39B; --bad:#D9363E; --focus:#0067C5;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0B1220; --ink:#F2F4F7; --ink2:#AEB6C2; --ink3:#77808E;
+    --rule:rgba(242,244,247,.14); --btn:rgba(18,27,45,.85); --card:rgba(255,255,255,.05);
+    --brand:#3D8EF0; --focus:#3D8EF0;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0B1220; --ink:#F2F4F7; --ink2:#AEB6C2; --ink3:#77808E;
+  --rule:rgba(242,244,247,.14); --btn:rgba(18,27,45,.85); --card:rgba(255,255,255,.05);
+  --brand:#3D8EF0; --focus:#3D8EF0;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--ink);font-family:var(--sans);font-weight:400;-webkit-font-smoothing:antialiased;transition:background .4s,color .4s}
+button{font:inherit;color:inherit;cursor:pointer}
+.mono{font-family:var(--mono)}
+
+#stage{position:fixed;inset:0;z-index:0}
+#stage canvas{display:block;touch-action:none}
+/* 桌面版 3D 只佔文字卡右側，內容不會蓋到模型；標籤超出範圍就裁掉 */
+/* 寬度不到 1024px 時 3D 區太窄、標籤放不下，改用上下排列的版面 */
+@media (min-width:1024px){
+  #stage{left:calc(80px + var(--cw));overflow:hidden}
+  /* 長章節往上捲時，文字在頂部標題列下方淡出，不和標題重疊 */
+  #panel{-webkit-mask-image:linear-gradient(to bottom,transparent 84px,#000 124px);mask-image:linear-gradient(to bottom,transparent 84px,#000 124px)}
+}
+.labels{position:absolute;inset:0;pointer-events:none}
+.veil{display:none;
+  background:linear-gradient(90deg,var(--bg) 0,var(--bg) 380px,transparent 620px);opacity:.92;transition:background .4s}
+
+/* 3D labels */
+.lbl{pointer-events:none;white-space:nowrap;transition:opacity .2s}
+.lbl .in{display:flex;align-items:baseline;gap:6px;transform:translateX(50%);font-size:13px;font-weight:500;color:var(--ink)}
+.lbl.left .in{transform:translateX(-50%);flex-direction:row-reverse}
+.lbl b{font-family:var(--mono);font-weight:500;font-size:11px;color:var(--c);letter-spacing:.04em}
+.lbl i{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--ink3)}
+.lbl.sm .in{font-size:12px}
+.lbl.center .in{transform:none}
+.lbl.title.mid .in{transform:translateX(-50%)}
+.lbl.title .in{transform:none;font-size:12px;font-weight:600;letter-spacing:.08em;color:var(--ink);padding:3px 8px;border:1px solid var(--rule);border-left:3px solid var(--brand);background:var(--btn);border-radius:0}
+.lbl.tag .in{transform:none;font-family:var(--mono);font-size:11px;padding:3px 8px;border-radius:2px;background:var(--brand);color:var(--on-brand)}
+.lbl.warn .in{transform:none;font-size:11.5px;padding:3px 8px;border-radius:2px;background:var(--bad);color:#fff}
+
+/* header */
+#top{position:fixed;left:56px;right:40px;top:28px;height:44px;z-index:3;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.brand{display:flex;align-items:center;gap:14px;font-size:14px;letter-spacing:.06em;color:var(--ink2)}
+.brand b{color:var(--ink);font-weight:700;display:flex;align-items:center;gap:10px}
+.brand b::before{content:"";width:14px;height:14px;background:var(--brand)}
+.brand .div{width:1px;height:22px;background:var(--rule)}
+.ctl{display:flex;gap:8px}
+.ctl button,#tools button,#bar button,.btn{border:1px solid var(--rule);background:var(--btn);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:2px;padding:7px 14px;font-size:13px;font-weight:500;transition:background .2s,border-color .2s}
+.ctl button:hover,#tools button:hover,#bar button:hover,.btn:hover{border-color:var(--brand);color:var(--brand)}
+.ctl button[aria-pressed="true"]{background:var(--brand);color:var(--on-brand);border-color:var(--brand)}
+button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+#tools{position:fixed;right:40px;top:84px;z-index:3;display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink3)}
+#tools .zoom{display:flex;align-items:center;gap:6px;color:var(--ink2);font-family:var(--mono);font-size:14px}
+#zoom{width:120px;accent-color:var(--brand);cursor:pointer}
+
+/* panel */
+/* 面板蓋滿畫面、只有左側文字卡可點，其餘的點擊與拖曳穿透到 3D */
+#panel{position:fixed;inset:0;z-index:2;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;overflow-anchor:none;scrollbar-width:none;pointer-events:none}
+#panel::-webkit-scrollbar{display:none}
+.pg{min-height:100%;padding:124px 56px 108px;display:flex;flex-direction:column;opacity:.28;transition:opacity .45s}
+.pg.on{opacity:1}
+/* 縮放橫軸 --z：3D 放大時文字欄變窄、縮小時變寬 */
+/* 縮小模型時文字欄變寬，但最多寬到 3D 區還剩 520px，否則右側標籤會因為 3D 區太窄而超出；不影響預設寬度 */
+:root{--z:0;--cw0:min(600px, 46vw - 56px);--cw:min(calc(var(--cw0) * (1 - .2 * var(--z))), max(var(--cw0), calc(100vw - 600px)));--sh:calc(44svh + 10svh * var(--z))}
+.blk{width:var(--cw);max-width:100%;pointer-events:auto;padding:4px 28px 28px;border-radius:4px;background:color-mix(in srgb,var(--bg) 80%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+/* 捲動進場：各區塊依序由下浮上（參考 animejs.com） */
+.blk>*{opacity:0;transform:translateY(28px);transition:opacity .6s,transform .9s cubic-bezier(.16,.8,.24,1)}
+.pg.seen .blk>*{opacity:1;transform:none}
+.eyebrow{display:flex;align-items:center;gap:10px;font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--brand);margin-top:28px}
+.eyebrow .num{font-family:var(--mono);font-size:12px;color:var(--on-brand);background:var(--brand);border-radius:2px;padding:1px 6px}
+.eyebrow .sep{flex:0 0 18px;height:1px;background:var(--rule)}
+h1{font-size:54px;line-height:1.12;font-weight:700;letter-spacing:.02em;margin:22px 0 18px}
+h2{font-size:34px;line-height:1.25;font-weight:700;letter-spacing:.02em;margin:18px 0 14px;display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 12px}
+h2 em{font-style:normal;font-weight:400;font-size:16px;color:var(--ink3)}
+h2 .badge{font-family:var(--mono);font-size:14px;font-weight:500;color:#fff;background:var(--c,var(--ink));border-radius:2px;padding:3px 8px;align-self:center}
+h3{font-size:13px;font-weight:700;letter-spacing:.08em;color:var(--ink);margin:24px 0 10px;padding-left:10px;border-left:3px solid var(--brand)}
+.lede{font-size:16px;line-height:1.85;color:var(--ink2);margin:0 0 20px;font-weight:300}
+.lede b{color:var(--ink);font-weight:500}
+.hint{font-size:13px;color:var(--ink3);line-height:1.7;margin-top:28px}
+.foot{font-size:11.5px;color:var(--ink3);line-height:1.7;margin-top:26px;border-top:1px solid var(--rule);padding-top:12px}
+
+.figs{display:grid;grid-template-columns:repeat(2,1fr);gap:0 24px;border-top:2px solid var(--brand);padding-top:14px}
+.figs.three{grid-template-columns:repeat(3,1fr);gap:0 16px}
+.fig .n{font-size:38px;font-weight:700;line-height:1.1;color:var(--brand)}
+.fig .n small{font-family:var(--sans);font-size:14px;margin-left:3px;color:var(--ink2)}
+.fig .k{font-size:12px;color:var(--ink3);margin-top:4px;line-height:1.5}
+.fig .v{font-size:14.5px;line-height:1.5;margin-top:4px;color:var(--ink);overflow-wrap:anywhere}
+.fig .v.cli{font-family:var(--mono);font-size:12.5px}
+
+ul.does{list-style:none;margin:0;padding:0}
+ul.does li{position:relative;padding:8px 0 8px 22px;border-top:1px solid var(--rule);font-size:14.5px;line-height:1.65;color:var(--ink)}
+ul.does li::before{content:"";position:absolute;left:2px;top:17px;width:8px;height:8px;border-radius:2px;background:var(--c)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:12.5px;font-weight:500;padding:4px 10px;border-radius:2px;border:1px solid var(--rule);background:var(--card)}
+.analogy{margin-top:22px;padding:14px 16px;border-left:3px solid var(--c);background:var(--card);border-radius:0}
+.analogy .k{font-size:12px;letter-spacing:.08em;color:var(--ink3)}
+.analogy p{margin:6px 0 0;font-size:15px;line-height:1.75}
+
+/* overview rows */
+.stack{display:flex;flex-direction:column;border-top:1px solid var(--rule)}
+.row{display:grid;grid-template-columns:32px 1fr auto;align-items:center;gap:12px;text-align:left;background:none;border:0;border-bottom:1px solid var(--rule);padding:9px 4px;transition:background .2s,padding .25s}
+.row:hover,.row.hl{background:var(--card);padding-left:10px}
+.row .L{font-family:var(--mono);font-size:12px;font-weight:500;color:#fff;background:var(--c);border-radius:2px;text-align:center;padding:2px 0}
+.row .nm{font-size:15px;font-weight:600}
+.row .nm small{display:block;font-size:12.5px;font-weight:400;color:var(--ink3);margin-top:2px}
+.row .cli-s{font-family:var(--mono);font-size:11.5px;color:var(--ink2)}
+.group-tag{font-size:11.5px;font-weight:600;color:var(--brand);letter-spacing:.08em;margin:14px 0 6px}
+
+/* flow */
+.fl-now{display:flex;align-items:baseline;gap:10px;margin:18px 0 10px;flex-wrap:wrap}
+.fl-now .stepn{font-family:var(--mono);font-size:12px;color:var(--ink3)}
+.fl-now .stept{font-size:22px;font-weight:500}
+.nvs{display:flex;gap:8px;flex-wrap:wrap}
+.nv{font-family:var(--mono);font-size:11.5px;padding:3px 9px;border-radius:2px;border:1px solid var(--rule);color:var(--ink3);transition:background .3s,color .3s}
+.nv.lit{background:#D99A1E;border-color:#D99A1E;color:#fff}
+.nv.down{background:var(--bad);border-color:var(--bad);color:#fff}
+.fl-note{font-size:15px;line-height:1.8;margin-top:16px;min-height:5.4em}
+/* 流程章：每一步一段，捲到哪一段就演到哪一步 */
+.fstep{min-height:46vh;padding:18px 0 0 16px;border-left:2px solid var(--rule);opacity:.3;transition:opacity .4s,border-color .4s}
+.fstep.on{opacity:1;border-left-color:var(--brand)}
+.fstep .fl-now{margin-top:0}
+.fstep .fl-note{min-height:0}
+/* 3D 裡跟著流程移動的步驟卡 */
+.lbl.call .in{transform:translate(calc(-50% + var(--dx,0px)),calc(-100% + var(--dy,0px)));display:block;font-size:13px;font-weight:600;padding:6px 10px;background:var(--btn);border:1px solid var(--rule);border-top:3px solid var(--brand);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);color:var(--ink)}
+.lbl.call .in b{font-family:var(--mono);font-size:11px;color:var(--brand);margin-right:6px}
+
+/* compare */
+.cmp{width:100%;border-collapse:collapse;font-size:14px}
+.cmp th{font-size:12px;font-weight:700;color:var(--ink);text-align:left;padding:6px 6px 6px 0;border-bottom:2px solid var(--brand)}
+.cmp td{padding:11px 6px 11px 0;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.55}
+.cmp td:first-child{color:var(--ink3);font-size:12.5px;white-space:nowrap}
+
+/* quiz */
+.qcard{border:1px solid var(--rule);border-top:3px solid var(--brand);background:var(--card);border-radius:0;padding:16px 18px}
+.qcard .qn{font-family:var(--mono);font-size:11.5px;color:var(--ink3)}
+.qcard p{font-size:17px;line-height:1.7;margin:8px 0 0}
+.qbtns{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:14px}
+.qbtns button{border:1px solid var(--rule);background:var(--btn);border-radius:2px;padding:8px 0 6px;display:flex;flex-direction:column;align-items:center;gap:2px;transition:transform .15s,border-color .2s,background .2s;min-width:0}
+.qbtns button b{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--c)}
+.qbtns button span{font-size:11px;color:var(--ink2);white-space:nowrap}
+.qbtns button:hover:not(:disabled){transform:translateY(-2px);border-color:var(--c)}
+.qbtns button:disabled{cursor:default}
+.qbtns button.right{background:var(--c);border-color:var(--c)}
+.qbtns button.right b,.qbtns button.right span{color:#fff}
+.qbtns button.wrong{border-color:var(--bad);border-style:dashed;opacity:.8}
+.fb{min-height:5.2em;font-size:14.5px;line-height:1.75;margin-top:14px}
+.fb .res{font-weight:500}
+.fb .res.ok{color:var(--ok)} .fb .res.no{color:var(--bad)}
+.qfoot{display:flex;justify-content:space-between;align-items:center;margin-top:6px;font-size:13px;color:var(--ink2)}
+
+/* bottom bar */
+/* 右下角時間軸：深色膠囊加上跟著捲動位置移動的播放頭（參考 animejs.com） */
+#bar{position:fixed;right:40px;bottom:28px;height:44px;z-index:3;display:flex;align-items:center;gap:4px;padding:0 6px;background:#1B1E23;color:#E8EAED;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.18)}
+#bar #bPrev,#bar #bNext{width:32px;height:32px;padding:0;display:grid;place-items:center;background:none;border-color:transparent;color:inherit;backdrop-filter:none;-webkit-backdrop-filter:none}
+#bar #bPrev:hover,#bar #bNext:hover{color:#fff;background:rgba(255,255,255,.1)}
+#ticks{display:flex;gap:2px;align-items:center;position:relative;height:100%}
+#ticks button{border:0;background:none;padding:14px 4px 10px;font-family:var(--mono);font-size:10.5px;color:rgba(232,234,237,.45);position:relative;border-radius:0}
+#ticks button::after{content:"";position:absolute;left:50%;top:6px;width:1px;height:5px;background:rgba(232,234,237,.3)}
+#ticks button.on{color:#fff;font-weight:500}
+#ticks button:hover{color:#fff}
+#head{position:absolute;left:0;top:5px;bottom:5px;width:2px;margin-left:-1px;border-radius:2px;background:var(--brand2);box-shadow:0 0 8px var(--brand2);pointer-events:none;will-change:transform}
+#curT{font-size:12.5px;color:rgba(232,234,237,.7);margin:0 8px 0 4px;white-space:nowrap}
+#progress{position:fixed;left:0;top:0;height:3px;background:var(--brand);z-index:4;width:0;transition:width .25s linear}
+
+@media (max-width:1023px){
+  .veil{display:none}
+  #top{left:16px;right:16px;top:10px}
+  .brand span:not(.div){display:none}.brand .div{display:none}
+  .ctl{gap:6px}
+  .ctl button{padding:6px 8px;font-size:12px;white-space:nowrap}
+  .brand b{white-space:nowrap;font-size:13px;gap:8px}
+  .brand b::before{width:10px;height:10px}
+  #stage{bottom:auto;height:var(--sh);top:52px}
+  #tools{top:calc(52px + var(--sh) - 34px);right:16px}
+  #tools span{display:none}
+  #zoom{width:96px}
+  #panel{left:16px;right:16px;width:auto;top:calc(52px + var(--sh));bottom:64px;border-top:1px solid var(--rule);pointer-events:auto}
+  .pg{display:block;padding:0 0 48px}
+  .pg+.pg{border-top:1px solid var(--rule)}
+  .blk{width:auto;padding:0;background:none;backdrop-filter:none;-webkit-backdrop-filter:none}
+  .eyebrow{margin-top:16px}
+  h1{font-size:38px;margin:14px 0}
+  h2{font-size:26px}
+  .fig .n{font-size:26px}
+  #bar{left:16px;right:16px;bottom:12px}
+  #ticks{overflow-x:auto;scrollbar-width:none;flex:1;gap:0;justify-content:space-between}
+  /* 15 個刻度要擠進手機寬度，不必左右捲動 */
+  #ticks button{padding:14px 1px 10px;font-size:10px}
+  #bar #bPrev,#bar #bNext{width:28px}
+  #curT{display:none}
+  /* 畫面窄，3D 標籤只留中文名稱 */
+  .lbl i{display:none}
+  /* 次要標籤（aggr1、節點 A 這類）在手機上太擠 */
+  .lbl.sm{display:none}
+  /* 只留目前聚焦元件的標籤，其餘看面板 */
+  .lbl.main:not(.focus){display:none}
+  /* 災難、break 狀態面板上已經有，手機版不在模型上重複 */
+  .lbl.warn{display:none}
+}
+body:not([data-mode="flow"]) .lbl.nvl{display:none}
+/* 聚焦單一元件時只留它的標籤 */
+body[data-focus] .lbl:not(.focus):not(.call):not(.tag):not(.warn){display:none}
+/* 封面、總覽、測驗這類全景畫面只留主標籤，次要標籤（aggr1、Node B、HA interconnect）收起來 */
+body[data-mode="main"]:not([data-focus]) .lbl.sm{display:none}
+/* 左側標籤只留主名，避免伸進文字欄 */
+.lbl.left i{display:none}
+@media (prefers-reduced-motion:reduce){
+  .pg,.blk>*{transition:none}
+  .blk>*{opacity:1;transform:none}
+}
+</style>
+<script type="importmap">
+{"imports":{
+  "three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/":"https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+}}
+</script>
+</head>
+<body>
+<div id="progress"></div>
+<div id="stage"></div>
+<div class="veil"></div>
+
+<header id="top">
+  <div class="brand"><b>ONTAP 儲存架構</b><span class="div"></span><span>NetApp 叢集互動導覽</span></div>
+  <div class="ctl">
+    <button id="bAuto" aria-pressed="false">▶ 自動播放</button>
+    <button id="bTheme">明暗</button>
+    <button id="bFull">全螢幕</button>
+  </div>
+</header>
+
+<div id="tools"><span>⟲ 在模型上拖曳可旋轉視角，點選任一元件</span><label class="zoom" title="3D 縮放">－<input id="zoom" type="range" min="-1" max="1" step="0.05" value="0" aria-label="3D 模型縮放">＋</label><button id="bReset">↺ 重設視角</button></div>
+
+<aside id="panel" aria-live="polite"></aside>
+
+<nav id="bar" aria-label="章節">
+  <button id="bPrev" aria-label="上一章">←</button>
+  <div id="ticks"></div>
+  <button id="bNext" aria-label="下一章">→</button>
+  <div id="curT"></div>
+</nav>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+/* ───────────── 內容 ───────────── */
+const U = {
+  disk:{zh:'Disk',short:'Disk',en:'磁碟',color:'#6C7781',grp:'p',cli:'storage disk',
+    brief:'實體儲存媒體，歸屬某個 node',
+    lede:'cluster 最底層的實體儲存媒體：Flash（SSD）或容量型硬碟，裝在 disk shelf 裡。每顆 disk 都有一個<b>擁有者 node</b>，但 disk shelf 同時接到 HA pair 的兩個 node，夥伴才能在故障時接手。',
+    figs:[['類型','實體資源'],['看得到的人','只有 cluster administrator'],['CLI','storage disk show']],
+    does:['提供原始容量；要先組成 local tier 的 RAID group 才能存放資料','每顆 disk 屬於一個 node；沒分配出去的 disk 留作 spare disk，故障時用來重建','disk shelf 同時連到 HA pair 的兩個 node，takeover 時夥伴讀得到對方的 disk'],
+    terms:['SSD','HDD','spare disk','disk ownership','root-data partitioning'],
+    analogy:'倉庫裡一格格實體儲位，每一格都登記在某一棟倉庫名下。'},
+  aggr:{zh:'Local tier',short:'Local tier',en:'aggregate・本機層',color:'#6A4DC1',grp:'p',cli:'storage aggregate',
+    brief:'由 RAID group 組成的容量池',
+    lede:'把一組 disk 組成 RAID group，再合成一個容量池，就是 local tier。System Manager 稱它 <b>local tier</b>，CLI 與舊文件仍叫 <b>aggregate</b>。每個 local tier 屬於一個 node，模型裡每排最右邊兩顆紫色的是 parity disk。',
+    figs:[['類型','實體容量池'],['預設 RAID','RAID-DP（雙 parity）'],['CLI','storage aggregate show']],
+    does:['由一或多個 RAID group 組成；RAID 類型決定每組有幾顆 parity disk','RAID-DP 每個 RAID group 用兩顆 parity disk，兩顆 disk 同時故障也不遺失資料','建議的 RAID-DP RAID group 大小：HDD 12–20 顆、SSD 20–28 顆'],
+    terms:['RAID-DP','RAID-TEC','parity disk','RAID group','FabricPool','mirrored local tier'],
+    analogy:'把幾排貨架打通成一個庫存區，並留兩格放備份清單；任兩格貨架倒了，都能照清單補回來。'},
+  node:{zh:'Node & HA pair',short:'Node',en:'節點與 HA 配對',color:'#0067C5',grp:'p',cli:'storage failover',
+    brief:'控制器兩兩配對，互為備援',
+    lede:'一台控制器、它的儲存與網路連線，加上在上面執行的 ONTAP，合稱一個 <b>node</b>。node 兩兩組成 <b>HA pair</b>：每筆寫入同時記在兩邊的 NVRAM，一個 node 故障或維護時，夥伴會 <b>takeover</b> 它的儲存繼續服務，修好後再 <b>giveback</b>。',
+    figs:[['類型','實體資源'],['組成','兩台相近機型的控制器'],['CLI','storage failover show']],
+    does:['執行 ONTAP，處理資料存取與網路連線','寫入請求先記錄在兩個 node 的 NVRAM，才回覆用戶端','takeover 時夥伴接手對方的 local tier，並把 NVRAM 裡還沒寫進 disk 的資料補寫完；建議每個 node 的效能使用率維持在 50% 左右，留給 takeover 時的額外負載'],
+    terms:['AFF','ASA','FAS','NVRAM','HA interconnect','takeover','giveback'],
+    analogy:'兩棟互為備援的倉庫，每張入庫單都抄一份給隔壁；一棟停電，另一棟拿著副本接手出貨。'},
+  cluster:{zh:'Cluster interconnect',short:'Cluster',en:'叢集互連',color:'#00A39B',grp:'p',cli:'cluster',
+    brief:'把多組 HA pair 連成一套系統',
+    lede:'多組 HA pair 透過專用的<b>私有 cluster interconnect</b> 連成一個 cluster，對外像一套系統。要更多容量或效能，就加入 node，稱為 <b>scale-out</b>：SAN 最多 12 個 node，NAS 最多 24 個 node。',
+    figs:[['規模上限','NAS 24 ／ SAN 12 node'],['連線','專用私有網路'],['CLI','cluster show']],
+    does:['node 之間經由 cluster interconnect 彼此通訊','scale-out：加入 HA pair 提升容量或效能；也能升級 disk 或控制器做 scale-up','volume 與 LIF 可以不中斷地在 node 之間搬移'],
+    terms:['cluster interconnect','scale-out','cluster management LIF','不中斷營運'],
+    analogy:'用專用輸送帶把多棟倉庫連成一座物流園區，客戶只要對園區下單。'},
+  svm:{zh:'SVM',short:'SVM',en:'Storage VM・儲存虛擬機',color:'#6FA82B',grp:'l',cli:'vserver',
+    brief:'把資料提供給用戶端的虛擬儲存',
+    lede:'SVM（Storage VM，舊稱 <b>vserver</b>，CLI 仍用這個名字）就像跑在 hypervisor 上的虛擬機：把實體資源抽象化，透過 LIF 把 volume 提供給用戶端。模型上層的玻璃平台就是 SVM，它<b>橫跨兩個 node</b>，資料不綁定某顆 disk，網路不綁定某個 port。',
+    figs:[['類型','邏輯資源'],['範圍','可跨整個 cluster'],['CLI','vserver show']],
+    does:['每個 SVM 有自己的安全性、管理與 namespace，適合 multi-tenancy','同一個 SVM 可以同時提供 NAS 與 SAN','系統另有 admin、node、system 三種 SVM，只做管理，不能提供資料'],
+    terms:['data SVM','vserver','multi-tenancy','namespace','SVM administrator','QoS'],
+    analogy:'租進園區的一家公司：有自己的門禁、帳本和收件地址，不必管貨放在哪一棟。'},
+  lif:{zh:'LIF',short:'LIF',en:'邏輯介面',color:'#D6336C',grp:'l',cli:'network interface',
+    brief:'用戶端連線的位址，可搬移',
+    lede:'LIF（logical interface）是用戶端連到 SVM 的位址：NFS、SMB、iSCSI 用 IP，FC 用 WWPN。LIF 架在某個 node 的實體或邏輯 port 上（模型裡往下接到 node 的虛線），<b>搬到別的 port 時位址不變</b>，用戶端不用改設定。',
+    figs:[['位址','IP 或 WWPN'],['架在','實體埠、interface group、VLAN'],['CLI','network interface show']],
+    does:['用戶端與主機只要知道 LIF 的位址就能存取 SVM','一個 port 可裝載多個 LIF；同一個 SVM 可有 NAS 用與 SAN 用的 LIF','NAS LIF 在連結故障時自動移轉到 failover group 裡的其他 port；SAN LIF 不移轉，由主機端 ALUA／MPIO 改走其他路徑'],
+    terms:['IP','WWPN','interface group (ifgrp)','VLAN','broadcast domain','failover group'],
+    analogy:'公司的收件地址：倉庫換了哪個門口收貨，寄件人寫的地址都不用改。'},
+  vol:{zh:'FlexVol volume',short:'Volume',en:'磁碟區',color:'#F2A516',grp:'l',cli:'volume',
+    brief:'存放資料的邏輯容器',
+    lede:'volume 是存放資料的邏輯容器。FlexVol 和 local tier 只是<b>鬆散結合</b>（模型裡往下接到 local tier 的虛線）：一個 local tier 可以放很多個 volume，volume 可以線上擴充、縮減、搬到別的 local tier，或複製出 FlexClone。',
+    figs:[['類型','邏輯容器'],['放在','某個 local tier 上'],['CLI','volume show']],
+    does:['NAS 環境裡放檔案系統，SAN 環境裡放 LUN','用 junction path 掛進 SVM 的 namespace，例如 /eng/home','需要 PB 級的單一 namespace 時改用 FlexGroup：最多 200 個成員 volume、4000 億個檔案'],
+    terms:['FlexVol','FlexGroup','junction path','FlexClone','thin provisioning','SVM root volume'],
+    analogy:'公司的貨櫃：可以加大、縮小，或整個吊到另一個庫存區。'},
+  lun:{zh:'qtree & LUN',short:'qtree/LUN',en:'分區與虛擬磁碟',color:'#E8572A',grp:'l',cli:'qtree / lun',
+    brief:'volume 裡的分區與 virtual disk',
+    lede:'volume 裡還能再切分。<b>qtree</b> 是 volume 內的分割單位，可以各自設定 quota；<b>LUN</b> 是 SAN 主機看到的 virtual disk。NVMe 不用 LUN，而是用存放在 volume 裡的 <b>NVMe namespace</b>。',
+    figs:[['qtree','NAS 分區與 quota'],['LUN','FC／iSCSI 主機的 disk'],['CLI','qtree show／lun show']],
+    does:['qtree：把 volume 分成好管理的單位，搭配 quota 限制用量','LUN：Windows 主機把它當成一顆 disk；可以不中斷地搬到別的 volume','NVMe namespace 只能經由 NVMe 協定存取'],
+    terms:['qtree','quota','LUN','igroup','NVMe namespace'],
+    analogy:'貨櫃裡的隔間（qtree）或整箱封好的貨（LUN）：前者分給不同部門，後者整箱交給一位客戶。'},
+  snap:{zh:'Snapshot',short:'Snapshot',en:'快照',color:'#8B6B4A',grp:'d',cli:'volume snapshot',
+    brief:'volume 的唯讀 point-in-time image',
+    lede:'Snapshot 是 volume 的唯讀 point-in-time image。ONTAP 的 WAFL 檔案系統<b>不覆寫舊區塊</b>，而是把新資料寫到新區塊、只改 metadata，所以剛建立的 Snapshot 不佔額外空間，之後也只記錄變更。',
+    figs:[['範圍','一個 volume'],['空間','只記錄變更'],['CLI','volume snapshot show']],
+    does:['還原單一檔案、LUN，或整個 volume','snapshot policy 決定何時建立、保留幾份、如何命名，例如每天 0:10 建一份、保留最新兩份','Snapshot 和來源放在同一組 disk 上，<b>本身不算異地備援</b>；SnapMirror 與 vault 備份都以 Snapshot 為傳送單位'],
+    terms:['WAFL','snapshot policy','SnapRestore','snapshot reserve'],
+    analogy:'每天替庫存帳本拍一張照片；沒變動的頁面不必重拍，只記下改過的地方。'},
+  smir:{zh:'SnapMirror',short:'SnapMirror',en:'異地複寫',color:'#1C9AD6',grp:'d',cli:'snapmirror',
+    brief:'把 volume 或 SVM 複寫到另一個 cluster',
+    lede:'SnapMirror 把 volume（或整個 SVM）複寫到<b>另一個 cluster</b>。第一次做 baseline 傳輸，之後依排程<b>只傳新的 Snapshot</b>。主站台發生災難時，執行 <b>break</b> 讓目的地 volume 可寫入，用戶端改從 DR 站台存取；主站台修好後再 <b>resync</b>。',
+    figs:[['單位','volume 或 SVM'],['最短排程','5 分鐘（FlexVol）'],['CLI','snapmirror show']],
+    does:['來源與目的地的 cluster、SVM 要先建立 peer 關係','非同步模式依排程傳送；SVM DR 的 FlexVol 最短 15 分鐘。SnapMirror Synchronous 則同步寫入，RPO 為 0','vault 原則可長期保留每月 Snapshot，用於備份；舊稱 SnapVault，ONTAP 9.3 起併入 SnapMirror 授權'],
+    terms:['cluster peer','SVM peer','baseline','break','resync','SnapMirror Synchronous','vault'],
+    analogy:'把每天的帳本照片寄一份到另一座城市的倉庫；本地倉庫失火，那邊拿最新一張照片開門營業。'},
+};
+const KEYS = Object.keys(U);
+const FLOW = [
+  {t:'用戶端送出寫入',hl:['client','lifA'],pk:'lifA',tag:'WRITE',nv:[0,0],
+   note:'用戶端對 LIF 的 IP 位址送出 NFS 寫入。這個 LIF 架在 <b>node A</b> 的 port 上，所以由 node A 處理。'},
+  {t:'記錄到 A 的 NVRAM',hl:['nodeA'],pk:'nvA',tag:'LOG',nv:[1,0],
+   note:'node A 先把這筆寫入記錄到自己的 <b>NVRAM</b>（非揮發性記憶體），斷電也不會遺失。'},
+  {t:'鏡像到 B 的 NVRAM',hl:['nodeA','nodeB'],pk:'nvB',tag:'LOG',nv:[1,1],
+   note:'同一筆記錄透過 <b>HA interconnect</b> 鏡像到夥伴 node B 的 NVRAM。這時 node A 故障，B 也能 takeover 並補寫這筆資料。'},
+  {t:'回覆用戶端',hl:['client','lifA'],pk:'client',tag:'ACK',nv:[1,1],
+   note:'兩個 node 都記錄好之後，node A 才<b>回覆用戶端</b>寫入完成，不必等資料真的寫到 disk。'},
+  {t:'寫進 local tier',hl:['nodeA','aggrA','diskA'],pk:'aggrA',tag:'CP',nv:[0,0],
+   note:'累積的寫入以 <b>consistency point</b> 一次寫進 local tier。WAFL 把資料寫到<b>新區塊</b>，不覆寫舊區塊，完成後 NVRAM 的記錄就可以清掉。'},
+  {t:'建立 Snapshot',hl:['vol','snap'],pk:'snap',tag:'SNAP',nv:[0,0],
+   note:'snapshot policy 排定的時間到了，ONTAP 只複製 metadata，<b>指向現有的區塊</b>，幾乎不佔空間。舊區塊因為被 Snapshot 參照，不會被回收。'},
+  {t:'SnapMirror 更新',hl:['vol','smir','dst'],pk:'dst',tag:'Δ',nv:[0,0],dr:true,
+   note:'依複寫排程，SnapMirror 把<b>新 Snapshot 帶來的變更區塊</b>送到 DR cluster。FlexVol volume 的排程最短 5 分鐘；非同步模式可能遺失的資料量（RPO）大約就是這個間隔，傳輸落後時會更多。'},
+  {t:'主站台災難',hl:['dst','siteB'],pk:null,nv:[0,0],dr:true,fail:true,
+   note:'主站台整個斷線，<b>HA 也救不了</b>，因為兩個 node 都在同一個機房。DR cluster 上還有最近一次更新的完整複本。'},
+  {t:'Break，啟用 DR',hl:['dst','siteB','client'],pk:'lifB',tag:'WRITE',nv:[0,0],dr:true,fail:true,brk:true,
+   note:'在 DR cluster 執行 <b>snapmirror break</b>，目的地 volume 變成可寫入。用戶端改連 DR 站台 SVM 的 LIF，繼續存取資料。'},
+  {t:'反向 resync',hl:['vol','smir','dst'],pk:'vol',tag:'RESYNC',nv:[0,0],dr:true,brk:true,
+   note:'主站台修好後執行 <b>snapmirror resync</b>，把 DR 期間的變更反向同步回來，再安排時間切回主站台。'},
+];
+const QUIZ = [
+  {q:'一台控制器要停機更新韌體，它的夥伴接手，用戶端沒有中斷。',k:'node',why:'這是 HA pair 的 takeover，維護完成後再 giveback。'},
+  {q:'設定 RAID-DP，讓同一個 RAID group 裡兩顆 disk 同時故障也不遺失資料。',k:'aggr',why:'RAID group 與 RAID 類型都是在 local tier（aggregate）上設定的。'},
+  {q:'服務供應商要讓每個租戶有獨立的管理帳號、驗證與 namespace。',k:'svm',why:'每個 SVM 有自己的安全性、管理與 namespace，是 multi-tenancy 的單位。'},
+  {q:'把服務搬到另一個 node 的 port 上，用戶端掛載用的 IP 位址不用改。',k:'lif',why:'LIF 移動時會保留位址，用戶端只認 LIF 的位址。'},
+  {q:'Windows 主機透過 iSCSI 看到一顆新 disk，把它格式化成 NTFS。',k:'lun',why:'SAN 主機看到的 virtual disk 就是 LUN。'},
+  {q:'使用者誤刪了一個檔案，從昨天 0:10 的 point-in-time image 把它救回來。',k:'snap',why:'Snapshot 是 volume 的唯讀 point-in-time image，可以還原單一檔案。'},
+  {q:'為新的資料庫建立一個容器，之後要能線上擴充，也能搬到別的 local tier。',k:'vol',why:'FlexVol volume 和 local tier 鬆散結合，可以擴充、縮減與搬移。'},
+  {q:'再加入一組 HA pair，把容量與效能 scale-out；NAS 最多可以到 24 個 node。',k:'cluster',why:'HA pair 透過 cluster interconnect 組成 cluster，加入 node 就是 scale-out。'},
+  {q:'機櫃裡新裝了一批 SSD，還沒分配給任何 local tier，目前只是備用。',k:'disk',why:'尚未使用的 disk 是 spare disk，還不屬於任何 RAID group。'},
+  {q:'總部機房淹水，改由另一座城市的 cluster 接手，最多遺失最後幾分鐘的寫入。',k:'smir',why:'非同步 SnapMirror 依排程把 Snapshot 送到另一個 cluster；災難時 break 目的地 volume 即可接手，RPO 大約等於複寫間隔。'},
+];
+const CH = [
+  {kind:'cover',t:'封面'},
+  {kind:'overview',t:'元件總覽'},
+  ...KEYS.map(k=>({kind:'unit',k,t:U[k].zh})),
+  {kind:'flow',t:'從寫入到異地復原'},
+  {kind:'compare',t:'資料保護對照'},
+  {kind:'quiz',t:'情境測驗'},
+];
+const chOf = k => CH.findIndex(c=>c.kind==='unit'&&c.k===k);
+const pad = n => String(n).padStart(2,'0');
+console.assert(QUIZ.every(q=>chOf(q.k)>0) && FLOW.every(s=>s.hl.length) && KEYS.length<=10, '內容資料指到不存在的元件');
+
+/* ───────────── 面板 ───────────── */
+const panel = document.getElementById('panel');
+function secCover(i){return `
+<div class="eyebrow"><span class="num">${pad(i)}</span>資料儲存<span class="sep"></span>NetApp ONTAP 9</div>
+<h1>ONTAP<br>儲存架構與資料保護</h1>
+<p class="lede">ONTAP 是 NetApp AFF、ASA、FAS 系統上的資料管理軟體。它把<b>實體的</b>控制器、disk 與 port，變成<b>邏輯的</b> SVM、volume 與 LIF：管理員只管邏輯物件，硬體升級、搬資料都不必停機；再用 Snapshot 與 SnapMirror 把資料保護到另一個站台。</p>
+<div class="figs three">
+  <div class="fig"><div class="n">24<small>node</small></div><div class="k">NAS cluster 規模上限（SAN 為 12）</div></div>
+  <div class="fig"><div class="n">5<small>分鐘</small></div><div class="k">volume SnapMirror 最短複寫排程</div></div>
+  <div class="fig"><div class="n">2<small>顆</small></div><div class="k">RAID-DP 可承受同時故障的 disk 數</div></div>
+</div>
+<p class="hint">往下捲動開始，也可以按 ↓、→ 或空白鍵逐章前進，F 切換全螢幕；三維畫面下層是實體硬體、上層是邏輯資源，可拖曳旋轉，點選任一元件可直接跳到該章。</p>`}
+function secOverview(i){
+  const row = k => `<button class="row" data-unit="${k}" style="--c:${U[k].color}"><span class="L">${KEYS.indexOf(k)+1}</span><span class="nm">${U[k].zh} <span class="mono" style="color:var(--ink3);font-size:12px">${U[k].en}</span><small>${U[k].brief}</small></span><span class="cli-s">${U[k].cli}</span></button>`;
+  return `
+<div class="eyebrow"><span class="num">${pad(i)}</span>總覽</div>
+<h2>實體、邏輯、資料保護</h2>
+<p class="lede">模型下層是<b>只有 cluster administrator 看得到</b>的實體資源；上層玻璃平台是<b>用戶端實際連線</b>的邏輯資源，虛線標出它們落在哪個硬體上。最後兩項把資料保護到時間軸上與另一個站台。點選任一列查看細節。</p>
+<div class="group-tag">實體資源　cluster administrator 管理</div>
+<div class="stack">${KEYS.filter(k=>U[k].grp==='p').map(row).join('')}</div>
+<div class="group-tag">邏輯資源　用戶端看得到</div>
+<div class="stack">${KEYS.filter(k=>U[k].grp==='l').map(row).join('')}</div>
+<div class="group-tag">資料保護　時間點與異地複本</div>
+<div class="stack">${KEYS.filter(k=>U[k].grp==='d').map(row).join('')}</div>
+<p class="foot">右欄是 ONTAP CLI 的指令目錄，例如 <span class="mono">volume show</span>。SVM 在 CLI 中仍叫 vserver，local tier 仍叫 aggregate。</p>`}
+function secUnit(i,k){const d=U[k];return `
+<div class="eyebrow"><span class="num">${pad(i)}</span>${{p:'實體資源',l:'邏輯資源',d:'資料保護'}[d.grp]}<span class="sep"></span>${d.en}</div>
+<h2><span class="badge">${KEYS.indexOf(k)+1}</span>${d.zh}<em>${d.en}</em></h2>
+<p class="lede">${d.lede}</p>
+<div class="figs three">${d.figs.map(([a,b])=>`<div class="fig"><div class="k">${a}</div><div class="v ${a==='CLI'?'cli':''}">${b}</div></div>`).join('')}</div>
+<h3>負責什麼</h3>
+<ul class="does">${d.does.map(x=>`<li>${x}</li>`).join('')}</ul>
+<h3>相關名詞</h3>
+<div class="chips">${d.terms.map(p=>`<span class="chip">${p}</span>`).join('')}</div>
+<div class="analogy"><span class="k">倉儲比喻</span><p>${d.analogy}</p></div>`}
+function secFlow(i){return `
+<div class="eyebrow"><span class="num">${pad(i)}</span>高可用度與災難復原</div>
+<h2>從寫入到異地復原</h2>
+<p class="lede">跟著一筆 NFS 寫入：HA pair 保證<b>回覆過的寫入不會遺失</b>，Snapshot 與 SnapMirror 再把它送到另一個站台，<b>整個機房失效</b>時也能接手。</p>
+<p class="hint">往下捲動，模型會跟著一步一步演示。</p>
+${FLOW.map((st,j)=>`<div class="fstep" data-step="${j}">
+<div class="fl-now"><span class="stepn">步驟 ${j+1} / ${FLOW.length}</span><span class="stept">${st.t}</span></div>
+<div class="nvs">${st.dr?`<span class="nv ${st.fail?'down':'lit'}">${st.fail?'主站台斷線':'主站台'}</span><span class="nv ${st.brk?'lit':''}">${st.brk?'DR 可寫入':'DR 唯讀複本'}</span>`:`<span class="nv ${st.nv[0]?'lit':''}">Node A NVRAM</span><span class="nv ${st.nv[1]?'lit':''}">Node B NVRAM</span>`}</div>
+<p class="fl-note">${st.note}</p></div>`).join('')}`}
+function secCompare(i){return `
+<div class="eyebrow"><span class="num">${pad(i)}</span>資料保護</div>
+<h2>Snapshot、SnapMirror、MetroCluster</h2>
+<p class="lede">三種保護的差別在<b>複本放在哪裡</b>，以及最多可能遺失多少資料（<b>RPO</b>）。通常會疊加使用：Snapshot 救誤刪，SnapMirror 或 MetroCluster 防整個站台失效。</p>
+<table class="cmp">
+  <thead><tr><th></th><th>Snapshot</th><th>SnapMirror</th><th>MetroCluster</th></tr></thead>
+  <tbody>
+    <tr><td>複本在哪</td><td>同一個 volume、同一組 disk</td><td>另一個 cluster</td><td>另一個站台的 cluster</td></tr>
+    <tr><td>單位</td><td>volume</td><td>volume 或 SVM</td><td>整個 cluster 的 local tier 與 SVM 設定</td></tr>
+    <tr><td>RPO</td><td>依 snapshot 排程</td><td>非同步：約為複寫間隔，最短 5 分鐘<br>同步模式：0</td><td>0（同步鏡射）</td></tr>
+    <tr><td>復原動作</td><td>SnapRestore</td><td>break 目的地 volume</td><td>switchover</td></tr>
+    <tr><td>防的是</td><td>誤刪、檔案損毀</td><td>站台災難、長期備份（vault）</td><td>站台災難，持續可用</td></tr>
+  </tbody>
+</table>
+<p class="foot">Snapshot 和來源在同一組 disk 上，disk 或機房全毀時會一起消失，所以不能單獨當成災難復原。MetroCluster 以 SyncMirror 把每個 local tier 同步鏡射成兩份 plex，分放兩個站台。</p>`}
+function secQuiz(i){return `
+<div class="eyebrow"><span class="num">${pad(i)}</span>動手判斷</div>
+<h2>這是哪一個元件？</h2>
+<p class="lede">讀情境，選出最相關的元件，也可以直接點模型或按數字鍵 1–9、0。答完後模型會標出正確的元件。</p>
+<div class="qcard"><div class="qn" id="qN"></div><p id="qT"></p></div>
+<div class="qbtns" id="qB">${KEYS.map((k,j)=>`<button data-ans="${k}" style="--c:${U[k].color}"><b>${j+1}</b><span>${U[k].short}</span></button>`).join('')}</div>
+<div class="fb" id="qF"></div>
+<div class="qfoot"><span id="qS"></span><button class="btn" id="qNext">下一題 →</button></div>
+<p class="foot">內容整理自 NetApp ONTAP 9 繁體中文文件（concepts、high-availability、data-protection 等章節）。</p>`}
+
+panel.innerHTML = CH.map((c,i)=>{
+  const body = c.kind==='cover'?secCover(i):c.kind==='overview'?secOverview(i):c.kind==='unit'?secUnit(i,c.k):c.kind==='flow'?secFlow(i):c.kind==='compare'?secCompare(i):secQuiz(i);
+  return `<section class="pg" data-i="${i}" ${c.k?`style="--c:${U[c.k].color}"`:''}><div class="blk">${body}</div></section>`;
+}).join('');
+const sections = [...panel.querySelectorAll('.pg')];
+
+const ticks = document.getElementById('ticks');
+ticks.innerHTML = CH.map((c,i)=>`<button data-go="${i}" title="${c.t}" aria-label="${pad(i)} ${c.t}">${pad(i)}</button>`).join('');
+const tickBtns = [...ticks.children];
+const head = document.createElement('i'); head.id = 'head'; ticks.append(head);
+
+/* ───────────── 三維場景 ───────────── */
+const stage = document.getElementById('stage');
+const mqMobile = matchMedia('(max-width:1023px)');
+const reduced = matchMedia('(prefers-reduced-motion:reduce)').matches;
+
+const renderer = new THREE.WebGLRenderer({antialias:true,alpha:true,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+const labelR = new CSS2DRenderer();
+labelR.domElement.className = 'labels';
+stage.appendChild(labelR.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(32,1,0.1,200);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.dampingFactor = .08;
+controls.enablePan = false; controls.minDistance = 7; controls.maxDistance = 40;
+controls.maxPolarAngle = Math.PI*0.48; controls.autoRotateSpeed = 0.6;
+
+const hemi = new THREE.HemisphereLight(0xffffff,0xc9cac6,2.0); scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff,2.2);
+sun.position.set(10,15,9); sun.target.position.set(3,0,0); scene.add(sun.target); sun.castShadow = true;
+sun.shadow.mapSize.set(2048,2048);
+// 陰影相機只框住場景實際範圍（x 約 -6.5 到 11.5，z 約 -3 到 4.2）
+Object.assign(sun.shadow.camera,{left:-10,right:10,top:9,bottom:-9,near:4,far:36});
+sun.shadow.radius = 4;
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+scene.add(sun);
+// 補光：不投影，只提亮面向鏡頭的側面
+const fill = new THREE.DirectionalLight(0xffffff,.7);
+fill.position.set(6,3,12); scene.add(fill);
+const groundMat = new THREE.ShadowMaterial({opacity:.16});
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80,80),groundMat);
+ground.rotation.x = -Math.PI/2; ground.receiveShadow = true; scene.add(ground);
+
+const edgeMats = [];
+const bodyMats = []; // {m, color, mix}
+const units = [];
+const G = Object.fromEntries(KEYS.map(k=>[k,[]]));  // 每個元件對應的 unit（同一元件可能有 A、B 兩份）
+const N = {};                                        // 依名稱找 unit，流程章用
+const pickables = [];
+
+function label(html, cls, color){
+  const el = document.createElement('div');
+  el.className = 'lbl '+(cls||'');
+  if(color) el.style.setProperty('--c',color);
+  el.innerHTML = `<div class="in">${html}</div>`;
+  return {el, obj:new CSS2DObject(el)};
+}
+const lblHtml = k => `<b>${KEYS.indexOf(k)+1}</b><span>${U[k].zh}</span><i>${U[k].en}</i>`;
+// 相同尺寸共用同一份幾何體；材質仍各自獨立，因為透明度是逐個控制
+const geoCache = new Map(), edgeCache = new Map();
+function boxGeo(w,h,d){
+  const k = `b${w.toFixed(3)},${h.toFixed(3)},${d.toFixed(3)}`;
+  if(!geoCache.has(k)) geoCache.set(k,new THREE.BoxGeometry(w,h,d));
+  return geoCache.get(k);
+}
+function cylGeo(r,h){
+  const k = `c${r.toFixed(3)},${h.toFixed(3)}`;
+  if(!geoCache.has(k)) geoCache.set(k,new THREE.CylinderGeometry(r,r,h,40));
+  return geoCache.get(k);
+}
+function edgesOf(geo){
+  if(!edgeCache.has(geo)) edgeCache.set(geo,new THREE.EdgesGeometry(geo,20));
+  return edgeCache.get(geo);
+}
+function addEdges(mesh, op=.42){
+  const m = new THREE.LineBasicMaterial({color:0x161616,transparent:true,opacity:op});
+  edgeMats.push(m);
+  const l = new THREE.LineSegments(edgesOf(mesh.geometry),m);
+  mesh.add(l); return l;
+}
+function smat(hex, mix, extra={}){
+  const m = new THREE.MeshStandardMaterial({color:0xffffff,roughness:.8,metalness:0,...extra});
+  bodyMats.push({m,color:new THREE.Color(hex),mix});
+  return m;
+}
+function mesh(geo, m, pos, {pick=true, edges=.42, shadow=true}={}){
+  const o = new THREE.Mesh(geo,m); o.position.set(...pos);
+  o.castShadow = shadow; o.receiveShadow = true; o.userData.pick = pick;
+  if(edges) addEdges(o,edges);
+  return o;
+}
+function makeUnit(root, {key=null, name='', labels=[], pop=[0,0,0]}={}){
+  const u = {root, key, name, home:root.position.clone(), parts:[], labels, pop:new THREE.Vector3(...pop),
+    vis:{t:1,c:1}, dim:{t:1,c:1}, off:{t:new THREE.Vector3(), c:new THREE.Vector3()}, casters:[], ems:[]};
+  const seen = new Set();
+  root.traverse(o=>{
+    if(o.material && !seen.has(o.material)){
+      seen.add(o.material);
+      o.material.transparent = true; u.parts.push({m:o.material, base:o.material.opacity, tr:true});
+      if(o.material.emissive && !o.material.userData.own) u.ems.push(o.material);
+    }
+    if(o.isMesh && o.castShadow) u.casters.push(o);
+    if(o.isMesh && key && o.userData.pick){ o.userData.k = key; o.userData.u = u; pickables.push(o); }
+  });
+  units.push(u); scene.add(root);
+  if(key) G[key].push(u);
+  if(name) N[name] = u;
+  return u;
+}
+
+/* 版面：拆成上下兩層。下層是實體資源（disk、local tier、node、cluster switch），
+   上層是浮起來的玻璃平台 SVM，上面放 volume、LIF；虛線表示邏輯物件落在哪個實體資源上。
+   DR cluster 放在右邊遠處，只在資料保護相關的章節出現。 */
+const NX = 1.9, Z0 = .5, YL = 3.0, XB = 10;
+const VY = YL+.38, VTOP = YL+.73;               // volume 中心與頂面高度
+const VOLS = [-2.7,-1.9,-1.1,1.5,2.3];          // 前三個在 node A 的 local tier 上，後兩個在 B 上
+const VZ = .2;
+
+function dashed(pts, color, op=.75){
+  const g = new THREE.BufferGeometry().setFromPoints(pts.map(p=>p.isVector3?p:new THREE.Vector3(...p)));
+  const m = new THREE.LineDashedMaterial({color, dashSize:.12, gapSize:.08, transparent:true, opacity:op});
+  const l = new THREE.Line(g,m); l.computeLineDistances(); return l;
+}
+function tube(pts, r, m, pick=true){
+  const c = new THREE.CatmullRomCurve3(pts.map(p=>new THREE.Vector3(...p)));
+  const o = new THREE.Mesh(new THREE.TubeGeometry(c,32,r,8,false),m);
+  o.castShadow = true; o.userData.pick = pick; return o;
+}
+
+// disk：每個 node 6 顆，最右兩顆是 RAID-DP 的 parity disk
+function diskTray(side){
+  const g = new THREE.Group();
+  const dm = smat(U.disk.color,.55), pm = smat(U.aggr.color,.35);
+  for(let i=0;i<6;i++) g.add(mesh(boxGeo(.36,.5,1.8), i>=4?pm:dm, [side*NX+(i-2.5)*.44,.25,Z0]));
+  return g;
+}
+const dA = diskTray(-1), dB = diskTray(1);
+const lDisk = label(lblHtml('disk'),'main',U.disk.color); lDisk.obj.position.set(NX+1.5,.25,Z0+.9); dB.add(lDisk.obj);
+makeUnit(dA,{key:'disk',name:'diskA',pop:[0,0,.35]});
+makeUnit(dB,{key:'disk',name:'diskB',labels:[lDisk.el],pop:[0,0,.35]});
+
+// disk shelf 到 node 的線路：每個 node 都接到兩半，takeover 時才讀得到對方的 disk
+const sasG = new THREE.Group();
+const sasMat = smat(U.disk.color,.15,{roughness:.5});
+// [起點 x, 終點 x, 中段高度]：A→A、A→B、B→B、B→A
+[[-1.5,-1.5,.12],[-1.1,1.0,.2],[1.5,1.5,.12],[1.1,-1.0,.2]].forEach(([sx,tx,y])=>
+  sasG.add(tube([[sx,.1,-1.1],[(sx+tx)/2,y,-.75],[tx,.2,-.42]],.035,sasMat)));
+makeUnit(sasG,{key:'disk',name:'sas'});
+
+// local tier：蓋在 disk 上的薄板
+const aA = new THREE.Group(), aB = new THREE.Group();
+aA.add(mesh(boxGeo(2.8,.18,2.0), smat(U.aggr.color,.45), [-NX,.59,Z0]));
+aB.add(mesh(boxGeo(2.8,.18,2.0), smat(U.aggr.color,.45), [NX,.59,Z0]));
+const lAggr = label(lblHtml('aggr'),'main',U.aggr.color); lAggr.obj.position.set(NX+1.5,.68,Z0+.5); aB.add(lAggr.obj);
+const lAggr1 = label('<b>aggr1</b>','sm left',U.aggr.color); lAggr1.obj.position.set(-NX-1.5,.68,Z0+.5); aA.add(lAggr1.obj);
+makeUnit(aA,{key:'aggr',name:'aggrA',labels:[lAggr1.el],pop:[0,.12,0]});
+makeUnit(aB,{key:'aggr',name:'aggrB',labels:[lAggr.el],pop:[0,.12,0]});
+
+// node：控制器機箱、正面的 NVRAM，以及兩者之間的 HA interconnect
+const nvMats = [], nodeMats = [];
+function nodeBox(side){
+  const g = new THREE.Group();
+  const bm = smat(U.node.color,.7); nodeMats.push(bm);
+  g.add(mesh(boxGeo(3.0,1.0,.8), bm, [side*NX,.5,-1.5]));
+  const nm = smat('#D99A1E',.45,{roughness:.5}); nm.userData.own = true; nvMats.push(nm);
+  g.add(mesh(boxGeo(.9,.26,.06), nm, [side*NX-.8,.7,-1.07],{edges:.3}));
+  const nl = label('NVRAM','sm nvl'+(side<0?' left':''),'#D99A1E');
+  nl.obj.position.set(side*NX-.8+(side<0?-.5:.5),.45,-1.0); g.add(nl.obj);
+  return {g, nl};
+}
+const nA = nodeBox(-1), nB = nodeBox(1);
+nA.g.add(mesh(boxGeo(.8,.1,.1), smat(U.node.color,.1), [0,.75,-1.5],{edges:false}));
+const lHA = label('HA interconnect','sm center',U.node.color); lHA.obj.position.set(0,1.25,-1.5); nA.g.add(lHA.obj);
+// 主標籤放在 A 側：B 側後方是 cluster switch 的標籤
+const lNode = label(`<b>${KEYS.indexOf('node')+1}</b><span>Node A</span>`,'main left',U.node.color); lNode.obj.position.set(-NX-1.55,1.0,-1.5); nA.g.add(lNode.obj);
+const lNodeB = label('<b>Node B</b>','sm',U.node.color); lNodeB.obj.position.set(NX+1.55,1.0,-1.5); nB.g.add(lNodeB.obj);
+makeUnit(nA.g,{key:'node',name:'nodeA',labels:[nA.nl.el,lHA.el,lNode.el],pop:[0,0,-.2]});
+makeUnit(nB.g,{key:'node',name:'nodeB',labels:[nB.nl.el,lNodeB.el],pop:[0,0,-.2]});
+
+// cluster interconnect：後方的交換器，兩個 node 都接上
+const clG = new THREE.Group();
+clG.add(mesh(boxGeo(1.4,.36,.6), smat(U.cluster.color,.4), [NX+1.6,.18,-2.75]));
+const clMat = smat(U.cluster.color,.1,{roughness:.5});
+[[-NX,.5],[NX,.32]].forEach(([sx,y])=>clG.add(tube([[sx,y,-1.9],[NX+.4,y,-2.4],[NX+.9,.2,-2.75]],.04,clMat)));
+// 最右側的標籤，省略英文說明以免超出畫面
+const lCl = label(`<b>${KEYS.indexOf('cluster')+1}</b><span>Cluster interconnect</span>`,'main',U.cluster.color); lCl.obj.position.set(NX+2.35,.2,-2.75); clG.add(lCl.obj);
+makeUnit(clG,{key:'cluster',name:'cluster',labels:[lCl.el],pop:[0,0,-.35]});
+
+// SVM：浮在上層、橫跨兩個 node 的玻璃平台
+const glass = [];
+function platform(w, x){
+  const m = new THREE.MeshStandardMaterial({color:U.svm.color,roughness:1,opacity:.16,depthWrite:false});
+  const o = new THREE.Mesh(boxGeo(w,.06,2.6),m); o.position.set(x,YL,0); o.userData.pick = true;
+  const e = new THREE.LineBasicMaterial({color:U.svm.color,transparent:true,opacity:.9});
+  o.add(new THREE.LineSegments(edgesOf(o.geometry),e));
+  glass.push(m); return o;
+}
+const svG = new THREE.Group();
+svG.add(platform(6.9,0));
+const lSvm = label(`<b>${KEYS.indexOf('svm')+1}</b><span>SVM vs1</span><i>Storage VM</i>`,'main',U.svm.color); lSvm.obj.position.set(3.45,YL,1.3); svG.add(lSvm.obj);
+makeUnit(svG,{key:'svm',name:'svm',labels:[lSvm.el],pop:[0,.25,0]});
+
+// LIF：平台後緣的發光插頭，虛線往下接到 node 的 port
+function lif(x, ip, main, color=U.lif.color){
+  const g = new THREE.Group();
+  const m = smat(color,.05,{emissive:new THREE.Color(color),emissiveIntensity:.25}); m.userData.lif = true;
+  g.add(mesh(cylGeo(.18,.14), m, [x,YL+.1,-1.05]));
+  g.add(dashed([[x,YL-.03,-1.05],[x,1.0,-1.25]], color));
+  // LIF 標籤放左側：右側 volume 標籤在同一高度
+  const l = label(main?`<b>${KEYS.indexOf('lif')+1}</b><span>LIF ${ip}</span>`:`<b>LIF</b><span>${ip}</span>`, main?'main left':'sm left', color);
+  l.obj.position.set(x-.3,YL+.2,-1.05); g.add(l.obj);
+  return {g,l};
+}
+const lfA = lif(-NX,'10.0.0.11',true), lfB = lif(NX,'10.0.0.12',false);
+makeUnit(lfA.g,{key:'lif',name:'lifA',labels:[lfA.l.el],pop:[0,.25,0]});
+makeUnit(lfB.g,{key:'lif',name:'lifB0',labels:[lfB.l.el],pop:[0,.25,0]});
+
+// volume：立在平台上，虛線往下接到所在的 local tier
+const volG = new THREE.Group();
+const vm = smat(U.vol.color,.4);
+VOLS.forEach(x=>{ volG.add(mesh(cylGeo(.34,.7), vm, [x,VY,VZ])); volG.add(dashed([[x,YL-.03,VZ],[x,.68,VZ]], U.vol.color)); });
+const lVol = label(lblHtml('vol'),'main',U.vol.color); lVol.obj.position.set(VOLS[4]+.4,VY,VZ); volG.add(lVol.obj);
+makeUnit(volG,{key:'vol',name:'vol',labels:[lVol.el],pop:[0,.2,0]});
+
+// qtree 與 LUN：LUN 是最左邊 volume 頂上的方塊，qtree 是最右邊 volume 頂上的三格
+const lunG = new THREE.Group();
+const lm = smat(U.lun.color,.15);
+lunG.add(mesh(boxGeo(.3,.3,.3), lm, [VOLS[0],VTOP+.15,VZ]));
+[[-.12,-.11],[.12,-.11],[0,.13]].forEach(([dx,dz])=>lunG.add(mesh(boxGeo(.18,.06,.18), lm, [VOLS[4]+dx,VTOP+.03,VZ+dz],{edges:.3})));
+const lLun = label(lblHtml('lun'),'main left',U.lun.color); lLun.obj.position.set(VOLS[0]-.3,VTOP+.15,VZ); lunG.add(lLun.obj);
+makeUnit(lunG,{key:'lun',name:'lun',labels:[lLun.el],pop:[0,.3,0]});
+
+// Snapshot：浮在第二個 volume 上的半透明時間切片
+const snG = new THREE.Group();
+const snm = smat(U.snap.color,.25); snm.opacity = .55;
+[0,1,2].forEach(j=>snG.add(mesh(cylGeo(.34,.05), snm, [VOLS[1],VTOP+.14+j*.15,VZ],{edges:.25,shadow:false})));
+const lSnap = label(lblHtml('snap'),'main left',U.snap.color); lSnap.obj.position.set(VOLS[1]-.45,VTOP+.6,VZ); snG.add(lSnap.obj);
+makeUnit(snG,{key:'snap',name:'snap',labels:[lSnap.el],pop:[0,.3,0]});
+
+// SnapMirror：從有 Snapshot 的 volume 往右上方伸出的複寫管線（DR cluster 那一段在 siteB 裡）
+const SMEND = [4.0,VTOP+.7,VZ];
+const smG = new THREE.Group();
+const smm = smat(U.smir.color,.1,{roughness:.4});
+smG.add(tube([[VOLS[1]+.2,VTOP+.5,VZ],[0,VTOP+1.0,VZ],[2.6,VTOP+.95,VZ],SMEND],.05,smm));
+const cone = mesh(new THREE.ConeGeometry(.13,.3,20), smm, [SMEND[0]+.1,SMEND[1],SMEND[2]],{edges:false}); cone.rotation.z = -Math.PI/2; smG.add(cone);
+const lSm = label(lblHtml('smir'),'main center',U.smir.color); lSm.obj.position.set(SMEND[0]-.6,SMEND[1]+.45,SMEND[2]); smG.add(lSm.obj);
+makeUnit(smG,{key:'smir',name:'smir',labels:[lSm.el],pop:[0,.2,0]});
+
+// DR cluster：簡化成一組 HA pair、一個 local tier 和一個平台
+const sbG = new THREE.Group();
+const sbm = smat(U.node.color,.7);
+[-1,1].forEach(s=>sbG.add(mesh(boxGeo(1.3,.8,.7), sbm, [XB+s*.72,.4,-1.5],{pick:false})));
+sbG.add(mesh(boxGeo(2.6,.18,2.0), smat(U.aggr.color,.45), [XB,.42,Z0],{pick:false}));
+for(let i=0;i<5;i++) sbG.add(mesh(boxGeo(.36,.33,1.8), smat(U.disk.color,.55), [XB+(i-2)*.48,.165,Z0],{pick:false}));
+const pB = platform(2.6,XB); pB.userData.pick = false; sbG.add(pB);
+const lifDr = lif(XB-.6,'10.1.0.11',false,U.lif.color); sbG.add(lifDr.g);
+sbG.add(tube([SMEND,[7,VTOP+1.1,VZ],[XB,VTOP+.6,VZ]],.05,smat(U.smir.color,.1,{roughness:.4}),false));
+const lSite = label('DR cluster　cluster_dst','title'); lSite.obj.position.set(XB-.9,1.25,-1.5); sbG.add(lSite.obj);
+const glassB = glass.at(-1);
+const siteB = makeUnit(sbG,{name:'siteB',labels:[lSite.el,lifDr.l.el]});
+// 目的地 volume：屬於 SnapMirror，可以點
+const dsG = new THREE.Group();
+dsG.add(mesh(cylGeo(.34,.7), smat(U.smir.color,.35), [XB+.4,VY,VZ]));
+dsG.add(dashed([[XB+.4,YL-.03,VZ],[XB+.4,.51,VZ]], U.smir.color));
+const lDst = label('<b>vol1_dst</b>','sm',U.smir.color); lDst.obj.position.set(XB+.8,VY,VZ); dsG.add(lDst.obj);
+const dstU = makeUnit(dsG,{key:'smir',name:'dst',labels:[lDst.el],pop:[0,.2,0]});
+
+// 用戶端：只在流程章與 LIF 章出現
+const clientG = new THREE.Group();
+const cm = smat('#55575A',.5);
+clientG.add(mesh(boxGeo(1.3,.8,.1), cm, [0,.85,0],{pick:false}));
+clientG.add(mesh(boxGeo(.1,.4,.1), cm, [0,.25,0],{pick:false}));
+clientG.add(mesh(boxGeo(.6,.05,.4), cm, [0,.03,0],{pick:false}));
+clientG.position.set(.6,0,5.2);
+const lClient = label('用戶端　NFS','title'); lClient.obj.position.set(.3,1.5,0); clientG.add(lClient.obj);
+makeUnit(clientG,{name:'client',labels:[lClient.el]});
+
+// 主站台的硬體與邏輯物件，災難時一起變暗
+const SITE_A = units.filter(u=>u!==siteB && u!==dstU && u.name!=='client');
+
+// 對照章：Snapshot、SnapMirror、MetroCluster 三種保護並排
+const cmpU = [];
+function cmpSide(x, title, cap, build){
+  const g = new THREE.Group(); g.position.set(x,0,0);
+  build(g);
+  const t = label(title,'title mid'); t.obj.position.set(0,2.7,0); g.add(t.obj);
+  const c = label(cap,'center sm'); c.obj.position.set(0,-.15,1.6); g.add(c.obj);
+  cmpU.push(makeUnit(g,{labels:[t.el,c.el]}));
+}
+const cyl = (g,dx,col=U.vol.color) => g.add(mesh(cylGeo(.55,1.0), smat(col,.4), [dx,.5,0],{pick:false}));
+cmpSide(-5,'Snapshot','同一個 volume',g=>{
+  cyl(g,0);
+  const m = smat(U.snap.color,.25); m.opacity = .55;
+  [0,1,2].forEach(j=>g.add(mesh(cylGeo(.55,.06), m, [0,1.18+j*.2,0],{edges:.25,shadow:false,pick:false})));
+});
+cmpSide(0,'SnapMirror','另一個 cluster・非同步',g=>{
+  cyl(g,-1.2); cyl(g,1.2,U.smir.color);
+  g.add(dashed(new THREE.CatmullRomCurve3([[-.6,.8,0],[0,1.6,0],[.6,.8,0]].map(p=>new THREE.Vector3(...p))).getPoints(24),U.smir.color,1));
+});
+cmpSide(5,'MetroCluster','兩個站台・同步，RPO 0',g=>{
+  [-1.2,1.2].forEach(dx=>g.add(mesh(boxGeo(1.5,.14,1.5), smat(U.aggr.color,.45), [dx,.07,0],{pick:false})));
+  [-1.2,1.2].forEach(dx=>g.add(mesh(cylGeo(.5,.9), smat(U.vol.color,.4), [dx,.59,0],{pick:false})));
+  [.62,.86].forEach(y=>g.add(mesh(boxGeo(1.1,.06,.06), smat(U.smir.color,.1), [0,y,0],{edges:false,pick:false})));
+});
+const MAIN = units.filter(u=>!cmpU.includes(u));
+
+// 封包：流程章裡移動的小方塊
+const packet = new THREE.Group();
+const pkMat = new THREE.MeshStandardMaterial({color:0x0067C5,emissive:0x0067C5,emissiveIntensity:.5,roughness:.5});
+const pkMesh = new THREE.Mesh(boxGeo(.3,.3,.3),pkMat); pkMesh.castShadow = true; addEdges(pkMesh,.4); packet.add(pkMesh);
+const pkTag = label('','tag'); pkTag.obj.position.set(0,.6,0); packet.add(pkTag.obj);
+scene.add(packet);
+const PKPOS = {
+  client:[.6,1.6,5.2], lifA:[-NX,YL+.45,-1.05], nvA:[-NX-.8,.7,-.75], nvB:[NX-.8,.7,-.75], aggrA:[-NX,.85,Z0+1.3],
+  snap:[VOLS[1],VTOP+.75,VZ+.5], dst:[XB+.4,VTOP+.35,VZ], lifB:[XB-.6,YL+.45,-1.05], vol:[VOLS[1],VTOP+.35,VZ+.5],
+};
+// 每一步的焦點：相機往這裡靠近，步驟卡也標在這裡
+const FLOW_AT = [PKPOS.lifA, PKPOS.nvA, PKPOS.nvB, PKPOS.client, PKPOS.aggrA, PKPOS.snap, [7,VTOP+1.2,VZ], [XB,VTOP+.4,0], PKPOS.lifB, [4,VTOP+1.2,VZ]];
+console.assert(FLOW_AT.length===FLOW.length, 'FLOW_AT 與 FLOW 步數不同');
+const callTag = label('','call'); scene.add(callTag.obj);
+// 災難與 break 的狀態標籤，不受 unit 透明度控制
+const failTag = label('主站台斷線','warn'); failTag.obj.position.set(-NX-.4,1.35,-1.1); scene.add(failTag.obj);
+const brkTag = label('break・可寫入','warn'); brkTag.obj.position.set(XB+.4,YL-.5,1.3); scene.add(brkTag.obj);
+const pk = {from:new THREE.Vector3(...PKPOS.client), to:new THREE.Vector3(...PKPOS.client), k:1, pos:new THREE.Vector3(...PKPOS.client), on:0};
+
+/* ───────────── 狀態 ───────────── */
+let cur = -1, hoverK = '', auto = false, autoAcc = 0;
+const fl = {step:0};
+const quiz = {i:0, answered:false, pick:'', right:0, done:0};
+const FOCUS = {disk:[0,.3,.5],aggr:[0,.6,.5],node:[0,.6,-1.5],cluster:[.6,.3,-2.4],svm:[0,YL,0],lif:[0,YL,-1],vol:[0,VY,VZ],lun:[-1,VTOP,VZ],snap:[-1.9,VTOP,VZ],smir:[5,2,0]};
+const RED = new THREE.Color('#D9363E'), BLACK = new THREE.Color(0);
+
+function modeOf(ch){ return ch.kind==='flow'?'flow':ch.kind==='compare'?'cmp':'main'; }
+// DR cluster 只在資料保護相關的畫面出現，其他章節不佔畫面
+function drOn(){
+  const ch = CH[cur];
+  return (ch.kind==='unit'&&ch.k==='smir') || (ch.kind==='flow'&&!!FLOW[fl.step].dr) || (ch.kind==='quiz'&&quiz.answered&&QUIZ[quiz.i].k==='smir');
+}
+
+function computeTargets(){
+  const ch = CH[cur]; const mode = modeOf(ch);
+  document.body.dataset.mode = mode;
+  requestRender();
+  const st = FLOW[fl.step];
+  const fail = mode==='flow' && st.fail;
+  const qa = ch.kind==='quiz' && quiz.answered;
+  const dr = drOn();
+  for(const u of MAIN){
+    u.vis.t = mode==='cmp' ? 0 : 1;
+    if(u===siteB || u===dstU) u.vis.t = dr ? 1 : 0;
+    if(u.name==='client') u.vis.t = mode==='flow' || (ch.kind==='unit'&&ch.k==='lif') ? 1 : 0;
+    let dim = 1; const off = new THREE.Vector3();
+    if(ch.kind==='unit'){ dim = u.key===ch.k||u.name==='client'||(ch.k==='smir'&&u===siteB)?1:.12; if(u.key===ch.k) off.copy(u.pop); }
+    if(qa){ const c = QUIZ[quiz.i].k; dim = u.key===c||(c==='smir'&&u===siteB)?1:(u.key===quiz.pick?.5:.12); if(u.key===c) off.copy(u.pop); }
+    if(mode==='flow') dim = st.hl.includes(u.name) ? 1 : .28;
+    if(fail && SITE_A.includes(u)) dim = .18;
+    if(ch.kind==='cover' && u.key) off.y = ({disk:-.1,aggr:-.05,svm:.1,vol:.15,lun:.25,snap:.3,lif:.15,smir:.3}[u.key]||0);
+    const hov = !!u.key && hoverK===u.key && mode==='main';
+    if(hov && ch.kind!=='unit' && !qa) off.addScaledVector(u.pop,.6);
+    // hover 帶一點元件顏色的自發光
+    for(const m of u.ems){
+      if(hov){ m.emissive.set(U[u.key].color); m.emissiveIntensity = .2; }
+      else if(m.userData.lif){ m.emissive.set(U.lif.color); m.emissiveIntensity = .25; }
+      else { m.emissive.copy(BLACK); m.emissiveIntensity = 0; }
+    }
+    u.dim.t = dim; u.off.t.copy(off);
+  }
+  // 主站台斷線時 node 帶紅色
+  nodeMats.forEach(m=>{ if(fail){ m.emissive.copy(RED); m.emissiveIntensity = .35; } });
+  // 聚焦某個元件時（元件章、測驗答完）只留它的標籤，其餘標籤收起來，畫面不擁擠
+  const fk = ch.kind==='unit' ? ch.k : qa ? QUIZ[quiz.i].k : '';
+  document.body.toggleAttribute('data-focus', !!fk || mode==='flow');
+  for(const u of MAIN) for(const el of u.labels) el.classList.toggle('focus', mode==='flow' ? st.hl.includes(u.name) : !!fk && (u.key===fk || fk==='smir'&&u===siteB));
+  // NVRAM：記錄中的那一份發亮
+  const nv = mode==='flow' ? st.nv : [0,0];
+  nvMats.forEach((m,j)=>{ m.emissive.set(nv[j]?'#D99A1E':0); m.emissiveIntensity = nv[j]?.8:0; });
+  cmpU.forEach(u=>{ u.vis.t = mode==='cmp'?1:0; });
+
+  // 封包
+  pk.on = mode==='flow' && st.pk ? 1 : 0;
+  if(st.pk){
+    const p = new THREE.Vector3(...PKPOS[st.pk]);
+    if(!p.equals(pk.to)){ pk.from.copy(pk.pos); pk.to.copy(p); pk.k = reduced?1:0; }
+    pkTag.el.querySelector('.in').textContent = st.tag;
+  }
+}
+
+/* 相機 */
+const CAM = {
+  cover:{p:[7.3,7.8,16.4],t:[.6,1.9,0],mobile:{scale:1.1,shift:.4}},
+  main:{p:[6.9,7.3,15.6],t:[.6,1.9,0],mobile:{scale:1.04,shift:.4,dy:-.6}},
+  // 兩個站台一起入鏡的寬景：手機版只拉遠、不平移
+  wide:{p:[11.35,11.2,25.9],t:[4.25,1.9,0],mobile:{scale:1.25,shift:0}},
+  cmp:{p:[-.6,7.6,24.5],t:[-.6,1.1,.3],mobile:{scale:1.05,shift:0}},
+};
+function camFor(ch){
+  if(ch.kind==='cover') return CAM.cover;
+  if(ch.kind==='unit'){
+    if(ch.k==='smir') return CAM.wide;
+    const f = FOCUS[ch.k], b = CAM.main.t;
+    const t = b.map((v,j)=>v+(f[j]-v)*.35);
+    const d = CAM.main.p.map((v,j)=>(v-b[j])*.92);
+    // 手機版：cluster switch 的標籤在最右側，模型要多往左讓一點；qtree & LUN 的標籤在最左側，反過來往右
+    return {p:t.map((v,j)=>v+d[j]),t,mobile:{cluster:{scale:1.3,shift:2.8},lun:{scale:1.05,shift:-.3}}[ch.k]||CAM.main.mobile};
+  }
+  if(ch.kind==='flow'){
+    if(FLOW[fl.step].dr) return CAM.wide;
+    const b = CAM.main, f = FLOW_AT[fl.step];
+    // 手機版畫面窄，相機往焦點靠會把另一台 node 推出畫面，所以不靠近
+    const t = b.t.map((v,j)=>v+(f[j]-v)*(mqMobile.matches?0:.15));
+    return {p:t.map((v,j)=>v+(b.p[j]-b.t[j])*.95), t, mobile:b.mobile};
+  }
+  if(ch.kind==='compare') return CAM.cmp;
+  // 測驗答案是 SnapMirror 時，拉成兩個站台都入鏡的寬景
+  if(ch.kind==='quiz' && drOn()) return CAM.wide;
+  return CAM.main;
+}
+function camAt(c){
+  const p = new THREE.Vector3(...c.p), t = new THREE.Vector3(...c.t);
+  // 手機版沒有左側面板，場景寬，所以拉遠相機；標籤多在右側，相機與目標一起稍微右移
+  if(mqMobile.matches){
+    const m = c.mobile || {scale:1.12, shift:.4};
+    p.sub(t).multiplyScalar(m.scale*1.1).add(t);
+    // dy：相機與目標一起下移，模型往上讓，前方的用戶端才不會壓到底部的工具列
+    p.x += m.shift; t.x += m.shift; p.y += m.dy||0; t.y += m.dy||0;
+  } else p.sub(t).multiplyScalar(DESK_ZOOM).add(t);
+  // 縮放橫軸：往右放大（相機靠近），往左縮小，範圍 0.5～2 倍距離
+  p.sub(t).multiplyScalar(Math.pow(2,-userZoom)).add(t);
+  return {p,t};
+}
+// 相機目標：主迴圈讓相機以指數緩動追上 goal，捲動時 goal 連續變化
+const goal = {p:new THREE.Vector3(), t:new THREE.Vector3()};
+// 桌面版：依 3D 區域的寬度拉遠相機，讓模型與兩側標籤都放得下（以 1100px 寬為基準）；
+// 標籤多在模型右側，所以模型稍微往左偏（偏太多左側的 aggr1 標籤會被裁掉）
+let DESK_ZOOM = 1, userZoom = 0;
+function applyView(){
+  const w = renderer.domElement.clientWidth, h = renderer.domElement.clientHeight;
+  if(mqMobile.matches) camera.clearViewOffset();
+  else {
+    // 3D 區越窄，標籤（固定像素大小）占的比例越高，所以拉遠的幅度比寬度比例再多一點
+    DESK_ZOOM = Math.pow(Math.max(1, 1100/Math.max(300, w)), 1.15);
+    camera.setViewOffset(w,h,Math.round(40*Math.min(1,w/760)),0,w,h);
+  }
+  camera.updateProjectionMatrix();
+}
+// 縮放時直接按比例改相機距離，保留使用者轉過的視角
+document.getElementById('zoom').addEventListener('input',e=>{
+  const dz = DESK_ZOOM;
+  document.documentElement.style.setProperty('--z', e.target.value);
+  sizeStage(); restoreAnchor();
+  const r = Math.pow(2, userZoom - +e.target.value) * DESK_ZOOM/dz; userZoom = +e.target.value;
+  camera.position.sub(controls.target).multiplyScalar(r).add(controls.target);
+  goal.p.sub(goal.t).multiplyScalar(r).add(goal.t);
+  requestRender(); moveHead();
+});
+let follow = false, spin = false;
+function setGoal(p, t, instant){
+  goal.p.copy(p); goal.t.copy(t); follow = true;
+  if(instant||reduced){ camera.position.copy(p); controls.target.copy(t); }
+  requestRender();
+}
+function flyTo(c, instant){ const g = camAt(c); setGoal(g.p, g.t, instant); }
+// 捲動驅動相機：面板 45% 那條線跨過章節交界前後各 1/4 面板高的範圍內，相機從上一章視角過渡到下一章
+function scrub(instant){
+  const H = panel.clientHeight, y = panel.scrollTop + H*.45, B = H*.5;
+  let i = 0; while(i<sections.length-1 && sections[i+1].offsetTop - B/2 <= y) i++;
+  const s = i>0 ? Math.min(1,(y - sections[i].offsetTop + B/2)/B) : 1;
+  const b = camAt(camFor(CH[i]));
+  if(s<1){ const a = camAt(camFor(CH[i-1])), e = ease(s); b.p.lerpVectors(a.p,b.p,e); b.t.lerpVectors(a.t,b.t,e); }
+  setGoal(b.p, b.t, instant);
+}
+// 播放頭：捲動位置對應到兩個刻度之間的連續位置
+function moveHead(){
+  const y = panel.scrollTop;
+  let j = 0; while(j<sections.length-1 && sections[j+1].offsetTop <= y) j++;
+  const c = k => tickBtns[k].offsetLeft + tickBtns[k].offsetWidth/2;
+  const f = j<sections.length-1 ? Math.min(1,(y-sections[j].offsetTop)/(sections[j+1].offsetTop-sections[j].offsetTop)) : 0;
+  head.style.transform = `translateX(${c(j) + (j<sections.length-1 ? f*(c(j+1)-c(j)) : 0)}px)`;
+}
+controls.addEventListener('start',()=>{ follow = false; });
+const ease = x => x<.5 ? 4*x*x*x : 1-Math.pow(-2*x+2,3)/2;
+
+/* ───────────── 章節切換 ───────────── */
+const curT = document.getElementById('curT');
+let scrollLock = false, lockT = 0;
+function go(i, instant, fromScroll){
+  i = Math.max(0,Math.min(CH.length-1,i));
+  if(i===cur) return;
+  cur = i;
+  sections.forEach((s,j)=>s.classList.toggle('on',j===i));
+  sections[i].classList.add('seen');
+  tickBtns.forEach((b,j)=>b.classList.toggle('on',j===i));
+  tickBtns[i].scrollIntoView({block:'nearest',inline:'center'});
+  if(!fromScroll){
+    // 按鈕、鍵盤、網址觸發：捲到該章，捲動期間不讓觀察器改章
+    scrollLock = true; clearTimeout(lockT); lockT = setTimeout(()=>scrollLock=false, 1200);
+    panel.scrollTo({top:sections[i].offsetTop, behavior:instant||reduced?'instant':'smooth'});
+    anchor = {el:sections[i], f:0}; // 捲動事件還沒來之前就先記下目的地
+  }
+  curT.textContent = `${pad(i)}　${CH[i].t}`;
+  history.replaceState(null,'','#'+i);
+  const ch = CH[i];
+  if(ch.kind==='flow'){ fl.step = fromScroll ? stepAt() : 0; pk.pos.set(...PKPOS.client); pk.from.copy(pk.pos); pk.to.copy(pk.pos); pk.k=1; renderFlow(); }
+  if(ch.kind==='quiz') renderQuiz();
+  spin = ch.kind==='cover' && !reduced;
+  hoverK = '';
+  panel.querySelectorAll('.row.hl').forEach(r=>r.classList.remove('hl'));
+  // 捲動觸發時相機由 scrub() 處理；按鈕、鍵盤、網址觸發則直接飛到該章視角，不掃過中間各章
+  if(!fromScroll) flyTo(camFor(ch), instant);
+  computeTargets();
+  autoAcc = 0;
+}
+panel.addEventListener('scrollend',()=>{ scrollLock = false; stepGoal = -1; if(CH[cur].kind==='flow'){ flGo(stepAt()); scrub(); } });
+// 版面寬高一變文字就重排，用判定線在哪一章、章內百分之幾來還原捲動位置，避免跳章
+let anchor = null;
+// 流程章再細到「哪一步」，否則步驟卡高度變了會滑到上一步
+function saveAnchor(){
+  const y = panel.scrollTop + panel.clientHeight*.45;
+  let i = 0; while(i<sections.length-1 && sections[i+1].offsetTop <= y) i++;
+  let el = sections[i];
+  if(el.contains(fsteps[0]) && topOf(fsteps[0]) <= y){ let j = 0; while(j<fsteps.length-1 && topOf(fsteps[j+1]) <= y) j++; el = fsteps[j]; }
+  anchor = {el, f:(panel.scrollTop - topOf(el))/el.offsetHeight};
+}
+function restoreAnchor(){
+  if(!anchor) return;
+  const t = topOf(anchor.el), h = anchor.el.offsetHeight, H = panel.clientHeight*.45;
+  // 畫面頂端按比例還原，再夾住讓判定線仍落在同一章（同一步）
+  // 上下各留 2px：scrollTop 會被取整到裝置像素，剛好落在邊界時會差 1px 跑到上一步
+  panel.scrollTop = Math.min(Math.max(t + anchor.f*h, t - H + 2), t + h - H - 2);
+}
+panel.addEventListener('scroll',()=>{
+  saveAnchor();
+  if(!scrollLock){ if(CH[cur].kind==='flow') flGo(stepAt()); scrub(); }
+  moveHead();
+},{passive:true});
+// 區塊捲進畫面就開始進場動畫，不必等它成為目前章節
+const seenIO = new IntersectionObserver(es=>{ for(const e of es) if(e.isIntersecting) e.target.classList.add('seen'); },{root:panel, rootMargin:'0px 0px -12% 0px'});
+sections.forEach(s=>{ seenIO.observe(s); [...s.firstElementChild.children].forEach((c,j)=>c.style.transitionDelay = Math.min(j,6)*70+'ms'); });
+// 捲動瀏覽：面板高度 45% 的那條線落在哪一章，就切到哪一章
+const io = new IntersectionObserver(es=>{
+  if(scrollLock) return;
+  for(const e of es) if(e.isIntersecting) go(+e.target.dataset.i, false, true);
+},{root:panel, rootMargin:'-45% 0px -54% 0px'});
+sections.forEach(s=>io.observe(s));
+// 在模型上滾動滾輪也是捲動章節，所以關掉滾輪縮放
+controls.enableZoom = false;
+stage.addEventListener('wheel',e=>{ e.preventDefault(); panel.scrollBy({top:e.deltaY*(e.deltaMode===1?16:1)}); },{passive:false});
+ticks.addEventListener('click',e=>{ const b=e.target.closest('[data-go]'); if(b) go(+b.dataset.go); });
+document.getElementById('bPrev').onclick = ()=>go(cur-1);
+document.getElementById('bNext').onclick = ()=>go(cur+1);
+document.getElementById('bReset').onclick = ()=>scrub();
+
+// 總覽列：滑過連動模型、點選跳章
+panel.addEventListener('click',e=>{
+  const r = e.target.closest('.row'); if(r) go(chOf(r.dataset.unit));
+});
+panel.addEventListener('pointerover',e=>{
+  const r = e.target.closest('.row');
+  const k = r ? r.dataset.unit : '';
+  if(k!==hoverK && CH[cur].kind==='overview'){ hoverK = k; computeTargets(); }
+});
+
+/* 流程控制 */
+const $ = id => document.getElementById(id);
+const fsteps = [...panel.querySelectorAll('.fstep')];
+function renderFlow(){
+  fsteps.forEach((el,j)=>el.classList.toggle('on',j===fl.step));
+  callTag.el.querySelector('.in').innerHTML = `<b>${pad(fl.step+1)}</b>${FLOW[fl.step].t}`;
+  callTag.obj.position.set(...FLOW_AT[fl.step]).y += .75;
+  if(CH[cur]?.kind==='flow') computeTargets();
+}
+// 步驟段落在面板捲動內容裡的位置（文字卡有 backdrop-filter，offsetTop 會以卡片為基準，不能直接用）
+const topOf = el => el.getBoundingClientRect().top - panel.getBoundingClientRect().top + panel.scrollTop;
+// 面板 45% 那條線落在哪一段步驟
+function stepAt(){
+  const y = panel.scrollTop + panel.clientHeight*.45;
+  let j = 0; while(j<fsteps.length-1 && topOf(fsteps[j+1]) <= y) j++;
+  return j;
+}
+function flGo(s){
+  s = Math.max(0,Math.min(FLOW.length-1,s));
+  if(s===fl.step) return;
+  fl.step = s; renderFlow();
+}
+// 鍵盤、自動播放：捲到某一步
+// 平滑捲動途中再按鍵，要從目標步驟往下算，不是從目前步驟
+let stepGoal = -1;
+function scrollToStep(j){ stepGoal = j; panel.scrollTo({top:topOf(fsteps[j]) - panel.clientHeight*.3, behavior:reduced?'instant':'smooth'}); }
+
+/* 測驗 */
+function renderQuiz(){
+  const q = QUIZ[quiz.i];
+  $('qN').textContent = `情境 ${quiz.i+1} / ${QUIZ.length}`;
+  $('qT').textContent = q.q;
+  $('qB').querySelectorAll('button').forEach(b=>{ b.disabled=false; b.className=''; });
+  $('qF').innerHTML = '';
+  $('qS').textContent = quiz.done ? `答對 ${quiz.right} / ${quiz.done}` : '';
+  $('qNext').style.visibility = 'hidden';
+}
+function answer(k){
+  if(quiz.answered || CH[cur].kind!=='quiz' || !U[k]) return;
+  const q = QUIZ[quiz.i];
+  quiz.answered = true; quiz.pick = k; quiz.done++;
+  const ok = k===q.k; if(ok) quiz.right++;
+  $('qB').querySelectorAll('button').forEach(b=>{
+    const v = b.dataset.ans; b.disabled = true;
+    if(v===q.k) b.className='right'; else if(v===k) b.className='wrong';
+  });
+  const d = U[q.k];
+  $('qF').innerHTML = ok
+    ? `<span class="res ok">答對了｜${d.zh}</span><br>${q.why}`
+    : `<span class="res no">不是 ${U[k].zh}</span>，正確答案是 <b>${d.zh}</b>。<br>${q.why}`;
+  $('qS').textContent = `答對 ${quiz.right} / ${quiz.done}`;
+  $('qNext').style.visibility = 'visible';
+  $('qNext').textContent = quiz.i===QUIZ.length-1 ? '從頭再來 ↻' : '下一題 →';
+  computeTargets(); flyTo(camFor(CH[cur]));
+}
+$('qB').addEventListener('click',e=>{ const b=e.target.closest('[data-ans]'); if(b) answer(b.dataset.ans); });
+$('qNext').onclick = ()=>{
+  if(quiz.i===QUIZ.length-1){ quiz.i=0; quiz.right=0; quiz.done=0; } else quiz.i++;
+  quiz.answered=false; quiz.pick=''; renderQuiz(); computeTargets(); flyTo(camFor(CH[cur]));
+};
+
+/* 拾取：滑過與點選模型 */
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+let downAt = null;
+function pickK(e){
+  if(modeOf(CH[cur])!=='main') return '';
+  const r = renderer.domElement.getBoundingClientRect();
+  ndc.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1);
+  ray.setFromCamera(ndc,camera);
+  const hits = ray.intersectObjects(pickables,false).filter(h=>h.object.userData.u.vis.c>.5);
+  if(!hits.length) return '';
+  return hits[0].object.userData.k;
+}
+// pointermove 只記下位置，射線檢測在主迴圈裡每幀最多做一次
+let pendingHover = null;
+renderer.domElement.addEventListener('pointermove',e=>{ if(!e.buttons) pendingHover = e; });
+function processHover(){
+  if(!pendingHover) return;
+  const k = pickK(pendingHover); pendingHover = null;
+  renderer.domElement.style.cursor = k?'pointer':'grab';
+  if(k!==hoverK){ hoverK = k;
+    panel.querySelectorAll('.row').forEach(r=>r.classList.toggle('hl',r.dataset.unit===k));
+    computeTargets(); }
+}
+renderer.domElement.addEventListener('pointerleave',()=>{ pendingHover = null; if(hoverK){ hoverK=''; panel.querySelectorAll('.row.hl').forEach(r=>r.classList.remove('hl')); computeTargets(); }});
+renderer.domElement.addEventListener('pointerdown',e=>{ downAt=[e.clientX,e.clientY]; });
+renderer.domElement.addEventListener('pointerup',e=>{
+  if(!downAt || Math.hypot(e.clientX-downAt[0],e.clientY-downAt[1])>5) return;
+  const k = pickK(e); if(!k) return;
+  if(CH[cur].kind==='quiz') answer(k); else go(chOf(k));
+});
+
+/* 頂部控制 */
+const bAuto = $('bAuto');
+bAuto.onclick = ()=>{ auto=!auto; autoAcc=0; bAuto.setAttribute('aria-pressed',auto); bAuto.textContent = auto?'Ⅱ 自動播放':'▶ 自動播放'; };
+function themeNow(){ return document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light'); }
+function applyTheme(){
+  const dark = themeNow()==='dark';
+  const ink = new THREE.Color(dark?'#F2F4F7':'#0A0A0A');
+  edgeMats.forEach(m=>m.color.copy(ink));
+  const base = new THREE.Color(dark?'#1B2537':'#FFFFFF');
+  bodyMats.forEach(b=>b.m.color.copy(b.color).lerp(base, dark? Math.min(.62,b.mix*.85) : b.mix));
+  // 玻璃平台的透明度是 unit 的基準值，改 base 再讓 unit 重算
+  for(const u of units) for(const p of u.parts) if(glass.includes(p.m)){ p.base = dark?.22:.16; u.dirty = true; }
+  groundMat.opacity = dark?.38:.16;
+  hemi.groundColor.set(dark?'#2a3446':'#c9cdd3');
+  requestRender();
+}
+$('bTheme').onclick = ()=>{ document.documentElement.dataset.theme = themeNow()==='dark'?'light':'dark'; applyTheme(); };
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change',applyTheme);
+function toggleFull(){ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.(); }
+$('bFull').onclick = toggleFull;
+
+addEventListener('keydown',e=>{
+  if(e.target.closest('input,textarea,select')) return;
+  const k = e.key;
+  if(k==='ArrowRight'||k==='ArrowDown'||k==='PageDown'||(k===' '&&!e.target.closest('button'))){ e.preventDefault();
+    // 流程章裡 ↓、空白鍵先逐步前進，→ 直接換章
+    const st = stepGoal>=0 ? stepGoal : fl.step;
+    if(CH[cur].kind==='flow' && k!=='ArrowRight' && st<FLOW.length-1) scrollToStep(st+1); else go(cur+1); }
+  else if(k==='ArrowLeft'||k==='ArrowUp'||k==='PageUp'){ e.preventDefault();
+    const st = stepGoal>=0 ? stepGoal : fl.step;
+    if(CH[cur].kind==='flow' && k!=='ArrowLeft' && st>0) scrollToStep(st-1); else go(cur-1); }
+  else if(k==='f'||k==='F') toggleFull();
+  else if(k==='Home') go(0);
+  else if(k==='End') go(CH.length-1);
+  else if(CH[cur].kind==='quiz' && /^[0-9]$/.test(k)) answer(KEYS[(+k+9)%10]);
+});
+
+/* 尺寸 */
+function sizeStage(){
+  const r = stage.getBoundingClientRect();
+  const w = Math.max(1,r.width), h = Math.max(1,r.height);
+  renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+  renderer.setSize(w,h); labelR.setSize(w,h);
+  camera.aspect = w/h;
+  applyView();
+}
+function resize(){
+  sizeStage(); restoreAnchor();
+  if(cur>=0) scrub(true);
+  requestRender();
+  moveHead();
+}
+addEventListener('resize',resize);
+addEventListener('hashchange',()=>{ const n = parseInt(location.hash.slice(1)); if(Number.isFinite(n)) go(n); });
+mqMobile.addEventListener('change',()=>{ resize(); scrub(true); moveHead(); });
+
+/* ───────────── 主迴圈 ───────────── */
+// 按需重繪：畫面靜止時跳過 WebGL 與標籤的繪製，狀態邏輯（自動播放、流程步進）照常每幀執行
+let wake = 2;
+function requestRender(){ wake = Math.max(wake,2); }
+controls.addEventListener('change',requestRender);
+const EPS = 1e-3;
+function setLabel(el, o, vis){
+  if(el._o!==o){ el._o = o; el.style.opacity = o; }
+  if(el._v!==vis){ el._v = vis; el.style.visibility = vis; }
+}
+// 步驟卡超出畫面邊緣時往內推（手機版畫面窄，卡片常落在邊緣）
+const callIn = callTag.el.querySelector('.in');
+let cdx = 0, cdy = 0;
+function keepCallIn(){
+  const r = callIn.getBoundingClientRect(), s = stage.getBoundingClientRect(), m = 8;
+  const l = r.left-cdx, rt = r.right-cdx, t = r.top-cdy;
+  const dx = l<s.left+m ? s.left+m-l : rt>s.right-m ? s.right-m-rt : 0;
+  let dy = t<s.top+m ? s.top+m-t : 0;
+  // 步驟卡蓋到其他看得見的標籤就往上讓（讓開一個可能又碰到上一個，所以由下往上依序檢查），但不超出 3D 區頂端
+  const b = r.bottom-cdy;
+  const others = [...labelR.domElement.querySelectorAll('.lbl:not(.call) .in')]
+    .filter(e=>{ const cs = getComputedStyle(e.parentNode); return cs.visibility!=='hidden' && +cs.opacity>=.5 && e.offsetWidth; })
+    .map(e=>e.getBoundingClientRect()).sort((p,q)=>q.top-p.top);
+  for(const wr of others) if(l+dx<wr.right && rt+dx>wr.left && t+dy<wr.bottom && b+dy>wr.top) dy = Math.max(s.top+m-t, wr.top-4-b);
+  if(Math.abs(dx-cdx)>.5){ cdx = dx; callIn.style.setProperty('--dx',dx+'px'); }
+  if(Math.abs(dy-cdy)>.5){ cdy = dy; callIn.style.setProperty('--dy',dy+'px'); }
+}
+const clock = new THREE.Clock();
+const progress = $('progress');
+function tick(){
+  // dt 上限 0.25 秒讓轉場在低幀率下不會一次跳完；自動播放計時改用實際經過時間（上限 1 秒），低幀率時也照秒數換章
+  const raw = clock.getDelta(), dt = Math.min(raw,.25), t = clock.elapsedTime;
+  const k = reduced ? 1 : 1-Math.exp(-dt*6);
+
+  if(follow){
+    const kc = reduced ? 1 : 1-Math.exp(-dt*4);
+    camera.position.lerp(goal.p,kc); controls.target.lerp(goal.t,kc);
+    if(camera.position.distanceToSquared(goal.p)<1e-6 && controls.target.distanceToSquared(goal.t)<1e-6){
+      camera.position.copy(goal.p); controls.target.copy(goal.t); follow = false; }
+  }
+  processHover();
+  let active = follow;
+  // 封面自轉只在相機追上目標後才開始，否則會和捲動驅動的相機互相拉扯
+  controls.autoRotate = spin && !follow;
+  if(controls.update()) active = true;
+  if(controls.autoRotate) active = true;
+
+  for(const u of units){
+    const moving = Math.abs(u.vis.t-u.vis.c)>EPS || Math.abs(u.dim.t-u.dim.c)>EPS || u.off.c.distanceToSquared(u.off.t)>EPS*EPS;
+    if(!moving && !u.dirty) continue;
+    if(moving){
+      u.vis.c += (u.vis.t-u.vis.c)*k;
+      u.dim.c += (u.dim.t-u.dim.c)*k;
+      u.off.c.lerp(u.off.t,k);
+      active = true; u.dirty = true;
+    } else { u.vis.c = u.vis.t; u.dim.c = u.dim.t; u.off.c.copy(u.off.t); u.dirty = false; }
+    u.root.position.copy(u.home).add(u.off.c);
+    const a = u.vis.c*u.dim.c;
+    u.root.visible = u.vis.c>.01;
+    for(const p of u.parts){
+      p.m.opacity = p.base*a; p.m.depthWrite = p.base*a>.6;
+      // 完全不透明時改走不透明渲染流程，深度排序正確
+      const tr = p.base*a < .999;
+      if(tr!==p.tr){ p.tr = tr; p.m.transparent = tr; p.m.needsUpdate = true; }
+    }
+    // 變淡的物件不投影，否則地面陰影會透過半透明物件形成一大塊灰
+    const cast = a>.6;
+    if(cast!==u.cast){ u.cast = cast; for(const m of u.casters) m.castShadow = cast; }
+    for(const el of u.labels) setLabel(el, +(u.vis.c*(.3+.7*u.dim.c)).toFixed(3), u.vis.c<.03?'hidden':'visible');
+  }
+
+  // 流程章的狀態標籤
+  const flowOn = CH[cur]?.kind==='flow', st = FLOW[fl.step];
+  setLabel(failTag.el, 1, flowOn && st.fail ? 'visible':'hidden');
+  setLabel(brkTag.el, 1, flowOn && st.brk ? 'visible':'hidden');
+  setLabel(callTag.el, 1, flowOn ? 'visible':'hidden');
+
+  // 封包：沿弧線飛向目標
+  packet.visible = pk.on>0;
+  setLabel(pkTag.el, 1, packet.visible?'visible':'hidden');
+  if(packet.visible){
+    active = true;
+    pk.k = Math.min(1, pk.k + dt/.9);
+    const e = ease(pk.k);
+    pk.pos.lerpVectors(pk.from,pk.to,e);
+    pk.pos.y += Math.sin(Math.PI*pk.k)*1.1;
+    packet.position.copy(pk.pos);
+    packet.position.y += Math.sin(t*2.2)*.04;
+    pkMesh.rotation.y = t*.8;
+  }
+
+
+  // 自動播放章節
+  if(auto){
+    const ch = CH[cur];
+    autoAcc += Math.min(raw,1);
+    const need = ch.kind==='flow'?3:8;
+    progress.style.width = Math.min(1,autoAcc/need)*100+'%';
+    if(autoAcc>need){
+      // 流程章：一步一步捲下去，最後一步之後才換章
+      if(ch.kind==='flow' && fl.step<FLOW.length-1){ autoAcc = 0; scrollToStep(fl.step+1); }
+      else if(cur>=CH.length-2){ go(cur+1); bAuto.click(); progress.style.width='0'; }
+      else go(cur+1);
+    }
+  } else progress.style.width = '0';
+
+  if(active || wake>0){
+    renderer.render(scene,camera);
+    labelR.render(scene,camera);
+    if(flowOn) keepCallIn();
+    if(wake>0) wake--;
+  }
+  requestAnimationFrame(tick);
+}
+
+/* 啟動 */
+applyTheme();
+resize();
+const start = parseInt(location.hash.slice(1));
+go(Number.isFinite(start)?start:0, true);
+moveHead();
+units.forEach(u=>{ u.vis.c=u.vis.t; u.dim.c=u.dim.t; u.off.c.copy(u.off.t); u.dirty=true; });
+pk.pos.copy(pk.to); pk.k = 1;
+tick();
+</script>
+</body>
+</html>
