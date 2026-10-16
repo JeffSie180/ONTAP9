@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ONTAP 機械圖解</title>
+<style>
+/* 底色和各圖的 --anatomy-page 一致，圖卡邊緣才不會出現色塊 */
+:root{--bg:#0b0b0b;--fg:#ddd;--dim:#8f8f8f;--line:#333;--card:#161616;--acc:#7cc4ff;color-scheme:dark}
+:root[data-theme="light"]{--bg:#f2f2ef;--fg:#222;--dim:#5f5f5f;--line:#cfcfca;--card:#fbfbfa;--acc:#0b63b6;color-scheme:light}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,-apple-system,"PingFang TC","Noto Sans TC",sans-serif}
+a{color:inherit}
+button{font:inherit;font-size:13px;background:none;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 10px;cursor:pointer}
+button:focus-visible,a:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+
+/* 頂部固定列：標題、分組目錄、主題切換 */
+header{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.bar{max-width:720px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px}
+@media (min-width:900px){.bar{max-width:960px}}
+.bar b{font-size:15px;font-weight:600;white-space:nowrap}
+.toc{flex:1;display:flex;gap:4px;overflow-x:auto;scrollbar-width:none}
+.toc::-webkit-scrollbar{display:none}
+.toc a{flex:none;font-size:13px;text-decoration:none;color:var(--dim);padding:4px 8px;border-radius:6px}
+.toc a:hover,.toc a.on{color:var(--fg);background:var(--card)}
+#theme{flex:none;white-space:nowrap}
+
+main{max-width:720px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:28px;font-weight:600;margin:0 0 8px}
+h2{font-size:24px;font-weight:600;margin:56px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
+h3{font-size:19px;font-weight:600;margin:32px 0 4px}
+p{color:var(--dim);margin:0 0 12px;line-height:1.65}
+.how{margin:0 0 8px;padding-left:20px;color:var(--dim);line-height:1.8}
+.how b{color:var(--fg);font-weight:500}
+section,.fig{scroll-margin-top:64px}
+.fig p{margin-bottom:10px}
+.meta{font-size:13px}
+.tag{white-space:nowrap;font-size:12px;font-weight:500;color:var(--acc);border:1px solid var(--line);border-radius:4px;padding:1px 6px;vertical-align:2px}
+details{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:16px 0}
+summary{cursor:pointer;font-size:14px;font-weight:500}
+details p,details dd{font-size:14px}
+details b,dt,.fg{color:var(--fg);font-weight:500}
+#gloss{scroll-margin-top:64px}
+dl{margin:10px 0 0;line-height:1.6}
+dt{font-size:14px;margin-top:8px}
+dd{margin:0;color:var(--dim)}
+iframe{display:block;overflow:hidden;width:100%;border:0;margin:0 0 8px;height:1000px}
+/* 手機：圖卡滿版，不和 main 的左右留白疊加 */
+@media (max-width:600px){
+  iframe{width:calc(100% + 32px);margin-left:-16px}
+  .bar b{display:none}
+}
+
+#top{position:fixed;right:16px;bottom:16px;z-index:5;background:var(--card);opacity:0;pointer-events:none;transition:opacity .2s}
+#top.show{opacity:1;pointer-events:auto}
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <b>ONTAP 機械圖解</b>
+    <nav class="toc" id="toc" aria-label="分組目錄"></nav>
+    <button id="theme" type="button" title="切換時各圖會重新載入，步驟回到第 1 步">淺色</button>
+  </div>
+</header>
+<main>
+<h1>ONTAP 機械圖解</h1>
+<p>用機房裡的真實設備，一步一步看 ONTAP 的每個功能在硬體上怎麼運作。16 張圖分成 6 組，後面的組會用到前面的觀念，建議照順序看；每組最後有自我檢查。</p>
+<p class="meta">內容依 ONTAP 9 官方中文文件（涵蓋到 9.19.1）查證；圖中標明「示意」的數字、時間和距離只是示意，不是實際值。</p>
+<ul class="how">
+  <li><b>換步驟</b>：按圖下方的步驟鈕，或用 ← → 鍵（作用在畫面中央的那張圖）；標「可旋轉」的圖，← → 是旋轉，有步驟的改用 PageUp / PageDown</li>
+  <li><b>標「可旋轉」的圖</b>是 3D 圖，可以拖曳旋轉</li>
+  <li><b>光點</b>是資料流，顏色的意思寫在每張圖下方</li>
+  <li><b>切換深淺色</b>時各圖會重新載入，步驟回到第 1 步</li>
+</ul>
+<p><b class="fg">先記住層級</b>：cluster ⊃ HA pair ⊃ node（controller）→ aggregate → volume；client 經 LIF 連到 SVM，再存取 SVM 裡的 volume。</p>
+<details class="gloss" id="gloss">
+  <summary>名詞速查（看不懂某個術語時先來這裡）</summary>
+  <dl>
+    <dt>HA pair · partner</dt><dd>兩個 controller（node）配成一對、互為備援；對方就叫 partner。</dd>
+    <dt>NVRAM</dt><dd>有電池保護的記憶體。寫入先記在這裡並 mirror 到 partner，斷電也不會遺失。</dd>
+    <dt>WAFL</dt><dd>ONTAP 的檔案系統：新資料寫到新 block、不覆寫舊 block，snapshot 因此不必複製資料。</dd>
+    <dt>consistency point（CP）</dt><dd>ONTAP 定期把 NVRAM 裡累積的寫入一次寫進磁碟的時間點。</dd>
+    <dt>RAID group · hot spare</dt><dd>一組互相用 parity 保護的硬碟；hot spare 是待命的硬碟，壞碟時自動補上。</dd>
+    <dt>aggregate（local tier）· plex</dt><dd>由 RAID group 組成、給 volume 使用的儲存池；plex 是 aggregate 的一份完整複本，SyncMirror 時有兩份。</dd>
+    <dt>ADP partition</dt><dd>把每顆硬碟切成 root 和 data partition，讓兩個 node 共用同一批硬碟。</dd>
+    <dt>takeover · giveback</dt><dd>partner 接手故障 node 的 aggregate，NAS data LIF 也移過去（SAN LIF 不移動，由主機 multipath 換路徑）；修好後 giveback。</dd>
+    <dt>SVM</dt><dd>cluster 裡的虛擬儲存伺服器，client 連的是 SVM，不是實體 node。</dd>
+    <dt>LIF · home port</dt><dd>掛在 port 上的邏輯網路介面（有自己的 IP），可以在 port 之間移動；home port 是它平常所在的 port。</dd>
+    <dt>failover group · failover policy</dt><dd>LIF 可以移去的 port 集合；policy 決定從中挑哪些、照什麼順序。</dd>
+    <dt>ifgrp（interface group）· LACP</dt><dd>把多條實體線綁成一個邏輯 port；LACP 是和 switch 協商的標準協定。</dd>
+    <dt>junction · export policy</dt><dd>volume 掛進 SVM namespace 的位置；export policy 決定哪些 NFS client 可以存取。</dd>
+    <dt>SnapMirror · SnapVault · SnapLock</dt><dd>把 snapshot 複製到另一個系統（disaster recovery／長期備份）；SnapLock 讓資料在期滿前無法刪除（WORM）。</dd>
+    <dt>MetroCluster · switchover</dt><dd>兩個 site synchronous mirroring 的 cluster；災難時由 surviving site 接手服務。</dd>
+    <dt>ONTAP Mediator · MAUSO</dt><dd>放在第三地、監看兩個 MetroCluster site 的服務；MAUSO 是由 Mediator 協助的自動 switchover。</dd>
+    <dt>FabricPool · performance tier · cloud tier</dt><dd>把冷資料從本機 SSD（performance tier）搬到 object storage（cloud tier）。</dd>
+    <dt>vol move · cutover</dt><dd>不停機搬移 volume；cutover 是最後切換到新位置、短暫擋住存取的那一刻。</dd>
+    <dt>NVE · KMIP · OKM</dt><dd>volume 層級的 encryption at rest；key 由外部 KMIP server或 ONTAP 內建的 OKM 管理。</dd>
+    <dt>ARP · entropy</dt><dd>Autonomous Ransomware Protection；entropy 是資料「看起來多亂」，被加密的檔案 entropy 會變高。</dd>
+  </dl>
+</details>
+<div id="groups"></div>
+</main>
+<button id="top" type="button" aria-label="回到頂端">↑ 頂端</button>
+<script>
+// [id, 標題, 一句摘要, 圖檔路徑（不含 -light 與 .html）, 附加連結 [文字, 路徑]]；d＝這組要回答的問題，q＝自我檢查 [問, 答]
+const TURN = new Set(["dc2", "dc1", "dc9"]);
+const GROUPS = [
+  {id:"g-hw", t:"硬體與磁碟", d:"資料實際存在哪裡？controller 裡的零件各做什麼？硬碟壞了資料怎麼不掉？", figs:[
+    ["dc2","圖 1 controller 模組 · 拆開上蓋","CPU、DIMM、NVRAM 與電池、boot media、PCIe 各在哪裡，NVRAM 在 write path 上扮演什麼角色。","dc2-controller/controller"],
+    ["dc1","圖 2 RAID-DP · NS224 硬碟 rebuild","RAID-DP 可承受同一 RAID group 同時兩顆故障；hot spare 自動補上，用 parity 在背景 rebuild。","dc1-raid/raid"],
+    ["dc3","圖 3 ADP · root-data-data partition","AFF 的每顆硬碟切成一個小 root partition 和兩個 data partition，原廠平分給兩個 node。","dc3-adp/adp"],
+  ], q:[
+    ["為什麼寫入不能只放在 DIMM？","DIMM 斷電後內容會消失。寫入要先記進有電池保護的 NVRAM，並 mirror 到 partner，才回覆 client。"],
+    ["RAID-DP 的 RAID group 在 rebuild 完成前同時壞了 3 顆硬碟會怎樣？","超過 RAID-DP 能重建的 2 顆，資料無法再用 parity 重建。要承受 3 顆同時故障要用 RAID-TEC。"],
+  ]},
+  {id:"g-ha", t:"HA 與 write path", d:"一筆寫入怎麼保證不遺失？node 當機時誰接手？升級時怎麼不停機？", figs:[
+    ["fig0","圖 4 HA write path · AFF A400 機箱內部","掀開 controller A 的 air duct 看 slot 11 的 NVDIMM：一筆寫入先記進 NVDIMM 並 mirror 到 partner 才回覆 client，之後在 consistency point 寫進磁碟；最後看 node 停機、takeover、抽出維修與 giveback。","fig4-chassis/chassis",["圖 4A 機架背面（逐群組看每條線）","fig0-rack/rack"]],
+    ["fig9","圖 5 HA takeover 與 giveback","node 當機時 partner 自動 takeover 它的 aggregate，NAS data LIF 也跟著移過去，修好後自動 giveback（預設先等 600 秒）。","fig9-ha/ha"],
+    ["dc8","圖 6 NDU · HA pair rolling upgrade","少於 8 個 node 時預設 rolling upgrade：一個 node takeover、升級、giveback，再換它的 partner。","dc8-ndu/ndu"],
+  ], q:[
+    ["client 感受到的寫入延遲，為什麼跟磁碟速度無關？","寫入記進 NVRAM 並 mirror 到 partner 就回覆，真正寫進磁碟是之後的 consistency point。"],
+    ["故障引起的 takeover 和 planned takeover，哪個中斷比較短？","planned takeover。它先把 aggregate 逐一搬給 partner；故障時 partner 要先確定收不到 heartbeat 才動作。"],
+  ]},
+  {id:"g-net", t:"網路與 NAS 存取", d:"client 怎麼連進來？port 斷線時連線怎麼不中斷？NFS 和 SMB 看到的是同一份資料嗎？", figs:[
+    ["fig8","圖 7 LIF 與 failover group","port 斷線時，LIF 依 failover 目標的順序移到下一個健康的 port；auto-revert 預設關閉。","fig8-network/network"],
+    ["dc6","圖 8 ifgrp LACP · LIF failover","多條實體線綁成 LACP interface group，成員故障時流量改走其他成員，LIF 也能移到其他 port。","dc6-network/network"],
+    ["fig2","圖 9 NAS · NFS / SMB namespace","SVM namespace 從 root volume 開始、其他 volume 掛在 junction 上；NFS 和 SMB 對大小寫的處理不同。","fig2-nas/nas"],
+  ], q:[
+    ["LIF 移到別的 port 後，client 要改連新的 IP 嗎？","不用。IP 位址跟著 LIF 走，client 連的還是同一個位址。"],
+    ["home port 恢復後，LIF 會自己搬回去嗎？","預設不會：auto-revert 預設為 false，要執行 network interface revert（或事先開啟 auto-revert）。"],
+  ]},
+  {id:"g-dp", t:"data protection", d:"誤刪、整個 site 毀掉、資料被要求保存多年，各用什麼保護？", figs:[
+    ["fig6","圖 10 snapshot · SnapVault · SnapLock","snapshot 建立當下不佔空間，之後只保留被改寫的舊 block；SnapVault 長期保留；SnapLock 讓資料期滿前無法刪除。","fig6-protect/protect"],
+    ["dc5","圖 11 SnapMirror · primary site 到 DR site","先做 baseline，之後依 schedule 只送新 snapshot；primary site 出事時啟用 destination volume，恢復後 resync。","dc5-snapmirror/snapmirror"],
+    ["dc4","圖 12 MetroCluster · 兩站 synchronous mirroring","SyncMirror 把每個 aggregate mirror 成兩個 plex 分放兩站；災難時 switchover，由 surviving site 服務。","dc4-metrocluster/metrocluster"],
+  ], q:[
+    ["snapshot 什麼時候開始佔空間？","active file system 改寫 block 之後。snapshot 還指向舊 block，這些舊 block 才算 snapshot 佔用的空間。"],
+    ["SnapMirror 和 MetroCluster 最大的差別？","圖 11 的 SnapMirror 是 volume 層級、依 schedule 送 snapshot 的變動（另有 SnapMirror Synchronous，仍是 volume 層級）；MetroCluster 用 SyncMirror 把整個 aggregate 同步寫兩站，兩站都收到才回覆 client，災難時整站 switchover。"],
+  ]},
+  {id:"g-tier", t:"FabricPool tiering", d:"很久沒用的資料，怎麼搬到便宜的 object storage，又不影響常用的資料？", figs:[
+    ["fig5","圖 13 FabricPool · 四種 tiering policy","snapshot-only、auto、all、none 各搬哪些 block；cooling period 預設 2 天與 31 天，每日掃描後湊成 4 MB 物件上傳。","fig5-tiering/tiering"],
+    ["dc7","圖 14 FabricPool · AFF 到 StorageGRID","冷 block 從 AFF 搬到 StorageGRID；auto policy 下隨機讀取會把資料拉回 performance tier，循序讀取不會。","dc7-fabricpool/fabricpool"],
+  ], q:[
+    ["預設的 tiering policy 是哪一個？它會搬 active file system 的 block 嗎？","snapshot-only。不會，它只搬 active file system 已不用、只剩 snapshot 參照的 block。"],
+    ["auto policy 下，循序讀取 cloud tier 的資料會怎樣？","資料從 cloud tier 讀出，但不會拉回 performance tier；隨機讀取才會拉回。"],
+  ]},
+  {id:"g-scale", t:"擴充與安全", d:"容量不夠時怎麼不停機長大？硬碟被偷或遇到 ransomware 時資料怎麼保住？", figs:[
+    ["dc9","圖 15 scale-out · 加 HA pair 與 vol move","cluster 以 HA pair 為單位擴充；vol move 期間原 volume 照常服務，cutover 預設最多擋 30 秒。","dc9-scaleout/scaleout"],
+    ["dc10","圖 16 NVE · KMIP · ARP","每個 volume 一把 XTS-AES-256 key，key 來自 KMIP 或 OKM；ARP 依 entropy、副檔名與 IOPS 偵測 ransomware。","dc10-security/security"],
+  ], q:[
+    ["vol move 期間 client 什麼時候會受影響？","只有 cutover 那一刻，預設最多擋住存取 30 秒；複製期間原 volume 照常服務。"],
+    ["硬碟被帶出機房，NVE 為什麼還能保護資料？","資料用每個 volume 的 XTS-AES-256 key 加密，key 放在 KMIP server或 OKM，不在硬碟上；沒有 key 只讀得到雜訊。"],
+  ]},
+];
+
+/* 分組與圖 */
+document.getElementById("toc").innerHTML = `<a href="#gloss" onclick="document.getElementById('gloss').open=true">速查</a>` + GROUPS.map(g=>`<a href="#${g.id}">${g.t}</a>`).join("");
+document.getElementById("groups").innerHTML = GROUPS.map(g=>`<section id="${g.id}"><h2>${g.t}</h2><p>${g.d}</p>${
+  g.figs.map(([id,t,d,src,extra])=>`<div class="fig" id="${id}"><h3>${t}${TURN.has(id)?' <span class="tag">可旋轉</span>':""}</h3><p>${d}</p><p class="meta"><a data-open="${src}" target="_blank" rel="noopener">開新分頁看大圖 ↗</a>${extra?`　·　<a data-open="${extra[1]}" target="_blank" rel="noopener">${extra[0]} ↗</a>`:""}</p><iframe scrolling="no" title="${t}" data-src="${src}" loading="lazy"></iframe></div>`).join("")
+}<details class="quiz"><summary>自我檢查</summary>${g.q.map(([q,a])=>`<p><b>${q}</b><br>${a}</p>`).join("")}</details></section>`).join("");
+
+/* 主題：沒有紀錄時跟隨系統 */
+let light;
+try { const v = localStorage.getItem("ontap-theme"); light = v ? v === "light" : matchMedia("(prefers-color-scheme: light)").matches; } catch { light = false; }
+const frames = [...document.querySelectorAll("iframe")];
+function apply() {
+  document.documentElement.dataset.theme = light ? "light" : "dark";
+  document.getElementById("theme").textContent = light ? "深色" : "淺色";
+  document.getElementById("theme").setAttribute("aria-label", light ? "切換為深色" : "切換為淺色");
+  const suf = (light ? "-light" : "") + ".html";
+  for (const f of frames) { f.onload = repin; f.src = f.dataset.src + suf; }
+  for (const a of document.querySelectorAll("[data-open]")) a.href = a.dataset.open + suf;
+}
+document.getElementById("theme").onclick = () => { light = !light; try { localStorage.setItem("ontap-theme", light ? "light" : "dark"); } catch {} apply(); };
+// 跳到錨點後，上方的圖載入時高度會變、把目標往下推；使用者自己捲動之前持續對齊目標
+let pin = location.hash ? document.getElementById(location.hash.slice(1)) : null;
+const repin = () => { if (pin) pin.scrollIntoView({ behavior: "instant" }); };
+document.addEventListener("click", (e) => { const a = e.target.closest('a[href^="#"]'); if (a) pin = document.getElementById(a.getAttribute("href").slice(1)); });
+for (const ev of ["wheel", "touchstart", "keydown", "pointerdown"]) addEventListener(ev, (e) => { if (!(ev === "pointerdown" && e.target.closest && e.target.closest('a[href^="#"]'))) pin = null; }, { passive: true });
+addEventListener("message", (e) => { const f = frames.find((f) => f.contentWindow === e.source); const h = e.data && e.data.anatomyHeight; if (f && h > 0 && f.style.height !== h + "px") { f.style.height = h + "px"; repin(); } });
+apply();
+
+/* ← → 轉送給畫面中央的圖（焦點已在圖內時由圖自己處理，這裡收不到） */
+addEventListener("keydown", (e) => {
+  if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+  if (e.target.closest && e.target.closest("input,textarea,select")) return;
+  const mid = innerHeight / 2;
+  let best = null, bd = Infinity;
+  for (const f of frames) { const r = f.getBoundingClientRect(); if (r.bottom < 0 || r.top > innerHeight) continue; const d = r.top <= mid && r.bottom >= mid ? 0 : Math.min(Math.abs(r.top - mid), Math.abs(r.bottom - mid)); if (d < bd) { bd = d; best = f; } }
+  if (!best) return;
+  // file:// 下讀不到 iframe 的 DOM，改用訊息請圖自己換步驟（接收端在 lib.mjs 的 EMBED）
+  e.preventDefault();
+  best.contentWindow.postMessage({ anatomyKey: e.key }, "*");
+});
+
+/* 目錄高亮與回到頂端 */
+const secs = [...document.querySelectorAll("section")], tocA = [...document.querySelectorAll('.toc a[href^="#g-"]')], topBtn = document.getElementById("top");
+function onScroll() {
+  topBtn.classList.toggle("show", scrollY > innerHeight);
+  let on = -1; secs.forEach((s, i) => { if (s.getBoundingClientRect().top < 120) on = i; });
+  tocA.forEach((a, i) => { const was = a.classList.contains("on"); a.classList.toggle("on", i === on); if (i === on && !was) a.scrollIntoView({ block: "nearest", inline: "nearest" }); });
+}
+addEventListener("scroll", onScroll, { passive: true }); onScroll();
+topBtn.onclick = () => scrollTo({ top: 0 });
+
+</script>
+</body>
+</html>

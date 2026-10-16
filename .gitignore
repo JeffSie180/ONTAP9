@@ -1,3 +1,9 @@
 *
 !index.html
 !.gitignore
+!anatomy/
+!anatomy/*/
+!anatomy/*.html
+!anatomy/*/*.html
+anatomy/**/*-debug*.html
+anatomy/fig0-tubes/
