@@ -111,7 +111,7 @@ html{color-scheme:dark}
 body[data-theme="light"]{color-scheme:light}
 body{margin:0;background:var(--anatomy-page);color:var(--anatomy-text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
 .iso-page{width:min(680px,100% - 32px);margin:64px auto 96px}
-</style><style>.iso-plate-corner,.iso-legend,body{font-family:ui-sans-serif,system-ui,-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif}.iso-plate-corner[data-corner="readout"],.iso-plate-corner[data-corner="fig"]{font-family:var(--anatomy-mono),"PingFang TC","Noto Sans TC",monospace}.iso-plate-corner[data-corner="hint"]{color:var(--anatomy-text)}@media(pointer:coarse){.iso-figure button{min-height:36px}}</style></head><body class="iso" data-theme="light"><main class="iso-page"><style>
+</style><style>.iso-plate-corner,.iso-legend,body{font-family:ui-sans-serif,system-ui,-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif}.iso-plate-corner[data-corner="readout"],.iso-plate-corner[data-corner="fig"]{font-family:var(--anatomy-mono),"PingFang TC","Noto Sans TC",monospace}.iso-plate-corner[data-corner="hint"]{color:var(--anatomy-text)}@media(pointer:coarse){.iso-figure button{min-height:36px}}.zh-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;margin:-40px 0 20px;font-size:13px;color:var(--anatomy-text);opacity:.75}.zh-top a{color:inherit}@media(min-width:1100px) and (min-height:700px){.iso-page{width:min(1040px,100% - 32px,max(680px,(100vh - 290px) * 1.1))}}</style></head><body class="iso" data-theme="light"><main class="iso-page"><nav class="zh-top"><a href="../index.html">← ONTAP 機械圖解（全部 16 張圖）</a><span>非 NetApp 官方教材</span></nav><script>if(parent!==window)document.currentScript.previousElementSibling.remove()</script><style>
 .rk-stage{position:relative;touch-action:pan-y;cursor:pointer}
 .rk-stage>svg{display:block;width:100%;height:auto}
 .rk-stage>.rk-over{position:absolute;inset:0;height:100%;pointer-events:none}
@@ -922,7 +922,7 @@ function tick(now) {
 }
 const run = () => { if (!frame && visible) { last = 0; frame = requestAnimationFrame(tick); } };
 new IntersectionObserver((e) => { visible = e[e.length - 1].isIntersecting; if (visible) run(); }, { rootMargin: "120px 0px" }).observe(stage);
-const hold = () => { touring = false; clearTimeout(idleTimer); idleTimer = setTimeout(() => { touring = !still.matches; tourT = 1; run(); }, 6000); };
+const hold = () => { touring = false; note.setAttribute("aria-live", "polite"); };
 const choose = (g) => { hold(); st.down = null; st.sel = g; describe(); };
 const toggleDown = (n) => { hold(); st.down = st.down === n ? null : n; describe(); };
 stage.addEventListener("click", (event) => {

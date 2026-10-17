@@ -111,7 +111,7 @@ html{color-scheme:dark}
 body[data-theme="light"]{color-scheme:light}
 body{margin:0;background:var(--anatomy-page);color:var(--anatomy-text);font:14px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
 .iso-page{width:min(680px,100% - 32px);margin:64px auto 96px}
-</style><style>.iso-plate-corner,.iso-legend,body{font-family:ui-sans-serif,system-ui,-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif}.iso-plate-corner[data-corner="readout"],.iso-plate-corner[data-corner="fig"]{font-family:var(--anatomy-mono),"PingFang TC","Noto Sans TC",monospace}.iso-plate-corner[data-corner="hint"]{color:var(--anatomy-text)}@media(pointer:coarse){.iso-figure button{min-height:36px}}</style></head><body class="iso" data-theme="dark"><main class="iso-page"><style>.iso-live{--tn-0:var(--anatomy-shade-0);--tn-1:var(--anatomy-shade-1);--tn-2:var(--anatomy-shade-2);--tn-3:var(--anatomy-shade-3);--tn-4:var(--anatomy-top)}
+</style><style>.iso-plate-corner,.iso-legend,body{font-family:ui-sans-serif,system-ui,-apple-system,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif}.iso-plate-corner[data-corner="readout"],.iso-plate-corner[data-corner="fig"]{font-family:var(--anatomy-mono),"PingFang TC","Noto Sans TC",monospace}.iso-plate-corner[data-corner="hint"]{color:var(--anatomy-text)}@media(pointer:coarse){.iso-figure button{min-height:36px}}.zh-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 16px;margin:-40px 0 20px;font-size:13px;color:var(--anatomy-text);opacity:.75}.zh-top a{color:inherit}@media(min-width:1100px) and (min-height:700px){.iso-page{width:min(1040px,100% - 32px,max(680px,(100vh - 290px) * 1.1))}}</style></head><body class="iso" data-theme="dark"><main class="iso-page"><nav class="zh-top"><a href="../index.html">← ONTAP 機械圖解（全部 16 張圖）</a><span>非 NetApp 官方教材</span></nav><script>if(parent!==window)document.currentScript.previousElementSibling.remove()</script><style>.iso-live{--tn-0:var(--anatomy-shade-0);--tn-1:var(--anatomy-shade-1);--tn-2:var(--anatomy-shade-2);--tn-3:var(--anatomy-shade-3);--tn-4:var(--anatomy-top)}
 .iso-live [data-mat]{--tn-0:var(--anatomy-shade-0);--tn-1:var(--anatomy-shade-1);--tn-2:var(--anatomy-shade-2);--tn-3:var(--anatomy-shade-3);--tn-4:var(--anatomy-top)}
 .iso-live [data-lit]{--tn-0:var(--anatomy-lit-shade);--tn-1:var(--anatomy-lit-shade);--tn-2:var(--anatomy-lit-shade);--tn-3:var(--anatomy-lit-shade);--tn-4:var(--anatomy-lit-top)}
 .iso-tn{stroke-width:.4;stroke-linejoin:round;--ta:var(--tn-0);--tb:var(--tn-1);fill:color-mix(in srgb,var(--ta) calc(100% - var(--f,0) * 100%),var(--tb));stroke:color-mix(in srgb,var(--ta) calc(100% - var(--f,0) * 100%),var(--tb))}
@@ -3837,7 +3837,7 @@ function tick(now){
   frame=visible&&(touring||moved||(S.copy&&clock<5))?requestAnimationFrame(tick):0;
 }
 const run=()=>{if(!frame&&visible){last=0;frame=requestAnimationFrame(tick);}};
-const hold=()=>{touring=false;clearTimeout(idle);idle=setTimeout(()=>{touring=!still.matches;run();},10000);};
+const hold=()=>{touring=false;note.setAttribute("aria-live","polite");};
 new IntersectionObserver((e)=>{visible=e[e.length-1].isIntersecting;if(visible)run();else if(frame){cancelAnimationFrame(frame);frame=0;}},{rootMargin:"120px 0px"}).observe(stage);
 let drag=null;
 stage.addEventListener("pointerdown",(e)=>{hold();drag={from:controller.angleAt(e.clientX,e.clientY,6,"turn"),base:target,id:e.pointerId,captured:false};});

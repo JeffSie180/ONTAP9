@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ONTAP 機械圖解</title>
+<meta name="description" content="16 張互動圖，用 AFF A400、NS224 等真實設備一步步看 ONTAP 9 的 write path、HA、網路、data protection、FabricPool 與安全功能。非 NetApp 官方教材。">
+<meta property="og:title" content="ONTAP 機械圖解">
+<meta property="og:description" content="16 張互動圖，用真實設備一步步看 ONTAP 9 的每個功能在硬體上怎麼運作。非 NetApp 官方教材。">
 <style>
 /* 底色和各圖的 --anatomy-page 一致，圖卡邊緣才不會出現色塊 */
 :root{--bg:#0b0b0b;--fg:#ddd;--dim:#8f8f8f;--line:#333;--card:#161616;--acc:#7cc4ff;color-scheme:dark}
@@ -31,8 +34,13 @@ h1{font-size:28px;font-weight:600;margin:0 0 8px}
 h2{font-size:24px;font-weight:600;margin:56px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
 h3{font-size:19px;font-weight:600;margin:32px 0 4px}
 p{color:var(--dim);margin:0 0 12px;line-height:1.65}
-.how{margin:0 0 8px;padding-left:20px;color:var(--dim);line-height:1.8}
 .how b{color:var(--fg);font-weight:500}
+.ans{background:none;border:0;padding:0;margin:-6px 0 14px}
+.ans summary{font-size:13px;color:var(--acc)}
+.anchor{display:block;scroll-margin-top:64px}
+h3 .hash{color:var(--dim);text-decoration:none;font-weight:400;margin-left:6px}
+#figlist ol{margin:8px 0 0;padding-left:22px;font-size:14px;line-height:1.8}
+#figlist a{color:var(--dim)}
 section,.fig{scroll-margin-top:64px}
 .fig p{margin-bottom:10px}
 .meta{font-size:13px}
@@ -50,6 +58,10 @@ iframe{display:block;overflow:hidden;width:100%;border:0;margin:0 0 8px;height:1
 @media (max-width:600px){
   iframe{width:calc(100% + 32px);margin-left:-16px}
   .bar b{display:none}
+  /* 目錄可橫捲：右緣淡出提示還有；頂端鈕縮成小圓鈕，少壓字 */
+  .toc{-webkit-mask-image:linear-gradient(to right,#000 80%,transparent);mask-image:linear-gradient(to right,#000 80%,transparent)}
+  #top{right:10px;bottom:10px;width:36px;height:36px;padding:0;border-radius:50%;font-size:0}
+  #top::before{content:"↑";font-size:16px}
 }
 
 #top{position:fixed;right:16px;bottom:16px;z-index:5;background:var(--card);opacity:0;pointer-events:none;transition:opacity .2s}
@@ -67,36 +79,46 @@ iframe{display:block;overflow:hidden;width:100%;border:0;margin:0 0 8px;height:1
 <main>
 <h1>ONTAP 機械圖解</h1>
 <p>用機房裡的真實設備，一步一步看 ONTAP 的每個功能在硬體上怎麼運作。16 張圖分成 6 組，後面的組會用到前面的觀念，建議照順序看；每組最後有自我檢查。</p>
-<p class="meta">內容依 ONTAP 9 官方中文文件（涵蓋到 9.19.1）查證；圖中標明「示意」的數字、時間和距離只是示意，不是實際值。</p>
-<ul class="how">
-  <li><b>換步驟</b>：按圖下方的步驟鈕，或用 ← → 鍵（作用在畫面中央的那張圖）；標「可旋轉」的圖，← → 是旋轉，有步驟的改用 PageUp / PageDown</li>
-  <li><b>標「可旋轉」的圖</b>是 3D 圖，可以拖曳旋轉</li>
-  <li><b>光點</b>是資料流，顏色的意思寫在每張圖下方</li>
-  <li><b>切換深淺色</b>時各圖會重新載入，步驟回到第 1 步</li>
-</ul>
-<p><b class="fg">先記住層級</b>：cluster ⊃ HA pair ⊃ node（controller）→ aggregate → volume；client 經 LIF 連到 SVM，再存取 SVM 裡的 volume。</p>
+<p class="meta">給想從硬體理解 ONTAP 9 的工程師與學生 · 16 張圖約 60–90 分鐘 · 硬體以 AFF A400＋NS224 為例 · 不含 SAN（LUN、igroup、ALUA） · 更新於 2026-10-17 · <a href="../">← 網站首頁</a></p>
+<p class="meta">非 NetApp 官方教材。內容依 ONTAP 9 官方中文文件（涵蓋到 9.19.1）查證；圖中標明「示意」的數字、時間和距離只是示意，不是實際值。NetApp、ONTAP、AFF 是 NetApp, Inc. 的商標。</p>
+<p class="how"><b>操作</b>：用圖下方的按鈕換步驟，鍵盤 ← → 也可以（作用在畫面中央的那張圖）；每張圖的操作寫在圖卡左下角。標「可旋轉」的 3D 圖可以拖曳。光點是資料流，顏色的意思寫在每張圖下方。</p>
+<p><b class="fg">先記住層級</b>：一個 cluster 由一組或多組 HA pair 組成，每組 2 個 node（controller）；每個 node 擁有自己的 aggregate，aggregate 裡放 volume。client 經 LIF 連到 SVM，再存取 SVM 裡的 volume。</p>
+<details id="figlist">
+  <summary>16 張圖一覽</summary>
+  <ol id="figol"></ol>
+</details>
 <details class="gloss" id="gloss">
   <summary>名詞速查（看不懂某個術語時先來這裡）</summary>
   <dl>
     <dt>HA pair · partner</dt><dd>兩個 controller（node）配成一對、互為備援；對方就叫 partner。</dd>
-    <dt>NVRAM</dt><dd>有電池保護的記憶體。寫入先記在這裡並 mirror 到 partner，斷電也不會遺失。</dd>
+    <dt>AFF · FAS · NS224 · NSM</dt><dd>AFF 是 NetApp 的全快閃儲存系統（本站以 AFF A400 為例），FAS 是混合／硬碟型系統；NS224 是 24 顆 NVMe SSD 的 disk shelf，NSM 是它背面的兩個 shelf module（見圖 4）。</dd>
+    <dt>HA interconnect · heartbeat</dt><dd>HA pair 兩個 node 之間的專用連線，用來 mirror NVRAM 和互送 heartbeat；收不到 heartbeat 就知道 partner 停了（見圖 4、5）。</dd>
+    <dt>cluster interconnect</dt><dd>cluster 內所有 node 之間的後端網路，vol move 等 node 間的資料傳輸走這裡（見圖 15）。</dd>
+    <dt>NVRAM · NVDIMM</dt><dd>有電池保護的非揮發記憶體，用來記錄寫入（log），並 mirror 到 partner，斷電也不會遺失。AFF A400 這類機型用 NVDIMM 實作 NVRAM（見圖 1、4）。</dd>
     <dt>WAFL</dt><dd>ONTAP 的檔案系統：新資料寫到新 block、不覆寫舊 block，snapshot 因此不必複製資料。</dd>
-    <dt>consistency point（CP）</dt><dd>ONTAP 定期把 NVRAM 裡累積的寫入一次寫進磁碟的時間點。</dd>
+    <dt>consistency point（CP）</dt><dd>ONTAP 定期把記憶體中累積的修改一次寫進磁碟的時間點。NVRAM 只是記錄，CP 完成後就清掉，只有故障時才拿來 replay。</dd>
     <dt>RAID group · hot spare</dt><dd>一組互相用 parity 保護的硬碟；hot spare 是待命的硬碟，壞碟時自動補上。</dd>
     <dt>aggregate（local tier）· plex</dt><dd>由 RAID group 組成、給 volume 使用的儲存池；plex 是 aggregate 的一份完整複本，SyncMirror 時有兩份。</dd>
+    <dt>root aggregate · data aggregate</dt><dd>root aggregate 放 node 自己的 root volume（系統設定與 log），每個 node 一個；data aggregate 放使用者的 volume。</dd>
     <dt>ADP partition</dt><dd>把每顆硬碟切成 root 和 data partition，讓兩個 node 共用同一批硬碟。</dd>
     <dt>takeover · giveback</dt><dd>partner 接手故障 node 的 aggregate，NAS data LIF 也移過去（SAN LIF 不移動，由主機 multipath 換路徑）；修好後 giveback。</dd>
+    <dt>CFO · SFO</dt><dd>aggregate 在 takeover／giveback 時的兩種處理方式：CFO 用於 root aggregate，giveback 時先還；SFO 用於 data aggregate，node 開機完成後再一個一個還（見圖 5）。</dd>
     <dt>SVM</dt><dd>cluster 裡的虛擬儲存伺服器，client 連的是 SVM，不是實體 node。</dd>
     <dt>LIF · home port</dt><dd>掛在 port 上的邏輯網路介面（有自己的 IP），可以在 port 之間移動；home port 是它平常所在的 port。</dd>
-    <dt>failover group · failover policy</dt><dd>LIF 可以移去的 port 集合；policy 決定從中挑哪些、照什麼順序。</dd>
+    <dt>broadcast domain</dt><dd>同一個 layer 2 網路裡的一群 port；ONTAP 依它自動建立 failover group（見圖 7、8）。</dd>
+    <dt>failover group · failover policy</dt><dd>LIF 可以移去的 port 集合；policy 決定從中挑哪些、照什麼順序。data LIF 預設的 system-defined 會挑 home node 和另一個 node（通常不是 HA partner）。</dd>
     <dt>ifgrp（interface group）· LACP</dt><dd>把多條實體線綁成一個邏輯 port；LACP 是和 switch 協商的標準協定。</dd>
     <dt>junction · export policy</dt><dd>volume 掛進 SVM namespace 的位置；export policy 決定哪些 NFS client 可以存取。</dd>
-    <dt>SnapMirror · SnapVault · SnapLock</dt><dd>把 snapshot 複製到另一個系統（disaster recovery／長期備份）；SnapLock 讓資料在期滿前無法刪除（WORM）。</dd>
+    <dt>SnapMirror · SnapVault · SnapLock</dt><dd>把 snapshot 複製到另一個系統（disaster recovery／長期備份）；ONTAP 9 的 SnapVault 就是套用 vault policy 的 SnapMirror 關係。SnapLock 讓資料在期滿前無法刪除（WORM）。</dd>
+    <dt>baseline · resync</dt><dd>baseline 是 SnapMirror 第一次的完整傳送；resync 是中斷後以兩邊共同的 snapshot 為基準，只補送差異（見圖 11）。</dd>
+    <dt>DP · RW</dt><dd>DP（data protection）volume 是 SnapMirror destination，只能讀；snapmirror break 後變成 RW（read-write），可以寫入。</dd>
+    <dt>RPO</dt><dd>recovery point objective：災難時最多能接受遺失多少時間的資料。非同步 SnapMirror 的 RPO 大約等於 schedule 間隔（見圖 11）。</dd>
     <dt>MetroCluster · switchover</dt><dd>兩個 site synchronous mirroring 的 cluster；災難時由 surviving site 接手服務。</dd>
     <dt>ONTAP Mediator · MAUSO</dt><dd>放在第三地、監看兩個 MetroCluster site 的服務；MAUSO 是由 Mediator 協助的自動 switchover。</dd>
     <dt>FabricPool · performance tier · cloud tier</dt><dd>把冷資料從本機 SSD（performance tier）搬到 object storage（cloud tier）。</dd>
+    <dt>tiering policy · cooling period</dt><dd>tiering policy 是每個 volume 的搬移規則（none、snapshot-only、auto、all）；cooling period 是 block 多久沒被讀就算冷（auto 預設 31 天）。aggregate 使用率超過 tiering fullness threshold（預設 50%）才開始搬（見圖 13）。</dd>
     <dt>vol move · cutover</dt><dd>不停機搬移 volume；cutover 是最後切換到新位置、短暫擋住存取的那一刻。</dd>
-    <dt>NVE · KMIP · OKM</dt><dd>volume 層級的 encryption at rest；key 由外部 KMIP server或 ONTAP 內建的 OKM 管理。</dd>
+    <dt>NVE · KMIP · OKM</dt><dd>volume 層級的 encryption at rest；key 由外部 KMIP server 或 ONTAP 內建的 OKM 管理。</dd>
     <dt>ARP · entropy</dt><dd>Autonomous Ransomware Protection；entropy 是資料「看起來多亂」，被加密的檔案 entropy 會變高。</dd>
   </dl>
 </details>
@@ -114,6 +136,7 @@ const GROUPS = [
   ], q:[
     ["為什麼寫入不能只放在 DIMM？","DIMM 斷電後內容會消失。寫入要先記進有電池保護的 NVRAM，並 mirror 到 partner，才回覆 client。"],
     ["RAID-DP 的 RAID group 在 rebuild 完成前同時壞了 3 顆硬碟會怎樣？","超過 RAID-DP 能重建的 2 顆，資料無法再用 parity 重建。要承受 3 顆同時故障要用 RAID-TEC。"],
+    ["情境：一顆硬碟壞了，hot spare 正在 rebuild，同一個 RAID group 又壞一顆。資料還在嗎？接下來該做什麼？","還在：RAID-DP 可承受同一 RAID group 兩顆故障。但這時已經沒有餘裕，要盡快換掉故障碟，並確認還有 hot spare。"],
   ]},
   {id:"g-ha", t:"HA 與 write path", d:"一筆寫入怎麼保證不遺失？node 當機時誰接手？升級時怎麼不停機？", figs:[
     ["fig0","圖 4 HA write path · AFF A400 機箱內部","掀開 controller A 的 air duct 看 slot 11 的 NVDIMM：一筆寫入先記進 NVDIMM 並 mirror 到 partner 才回覆 client，之後在 consistency point 寫進磁碟；最後看 node 停機、takeover、抽出維修與 giveback。","fig4-chassis/chassis",["圖 4A 機架背面（逐群組看每條線）","fig0-rack/rack"]],
@@ -122,6 +145,7 @@ const GROUPS = [
   ], q:[
     ["client 感受到的寫入延遲，為什麼跟磁碟速度無關？","寫入記進 NVRAM 並 mirror 到 partner 就回覆，真正寫進磁碟是之後的 consistency point。"],
     ["故障引起的 takeover 和 planned takeover，哪個中斷比較短？","planned takeover。它先把 aggregate 逐一搬給 partner；故障時 partner 要先確定收不到 heartbeat 才動作。"],
+    ["情境：node1 突然斷電。掛 NFS 的 Linux 主機，和連一般 SMB share（沒開 CA）的 Windows 使用者，各會遇到什麼？已經回覆成功的寫入會不見嗎？","node2 takeover 後兩邊都恢復服務：NFS client 只感到短暫停頓，一般 SMB session 會斷線、要重新連線。已回覆的寫入不會不見，它們在 node2 的 NVRAM mirror 裡，takeover 時會 replay。"],
   ]},
   {id:"g-net", t:"網路與 NAS 存取", d:"client 怎麼連進來？port 斷線時連線怎麼不中斷？NFS 和 SMB 看到的是同一份資料嗎？", figs:[
     ["fig8","圖 7 LIF 與 failover group","port 斷線時，LIF 依 failover 目標的順序移到下一個健康的 port；auto-revert 預設關閉。","fig8-network/network"],
@@ -130,6 +154,7 @@ const GROUPS = [
   ], q:[
     ["LIF 移到別的 port 後，client 要改連新的 IP 嗎？","不用。IP 位址跟著 LIF 走，client 連的還是同一個位址。"],
     ["home port 恢復後，LIF 會自己搬回去嗎？","預設不會：auto-revert 預設為 false，要執行 network interface revert（或事先開啟 auto-revert）。"],
+    ["情境：ifgrp a0a 有兩條成員線，其中一條被拔掉。LIF 會 failover 到別的 port 嗎？","不會。interface group 只要還有一個成員連線就算健康，流量改走剩下的成員；所有成員都斷了，LIF 才 failover。"],
   ]},
   {id:"g-dp", t:"data protection", d:"誤刪、整個 site 毀掉、資料被要求保存多年，各用什麼保護？", figs:[
     ["fig6","圖 10 snapshot · SnapVault · SnapLock","snapshot 建立當下不佔空間，之後只保留被改寫的舊 block；SnapVault 長期保留；SnapLock 讓資料期滿前無法刪除。","fig6-protect/protect"],
@@ -137,7 +162,8 @@ const GROUPS = [
     ["dc4","圖 12 MetroCluster · 兩站 synchronous mirroring","SyncMirror 把每個 aggregate mirror 成兩個 plex 分放兩站；災難時 switchover，由 surviving site 服務。","dc4-metrocluster/metrocluster"],
   ], q:[
     ["snapshot 什麼時候開始佔空間？","active file system 改寫 block 之後。snapshot 還指向舊 block，這些舊 block 才算 snapshot 佔用的空間。"],
-    ["SnapMirror 和 MetroCluster 最大的差別？","圖 11 的 SnapMirror 是 volume 層級、依 schedule 送 snapshot 的變動（另有 SnapMirror Synchronous，仍是 volume 層級）；MetroCluster 用 SyncMirror 把整個 aggregate 同步寫兩站，兩站都收到才回覆 client，災難時整站 switchover。"],
+    ["SnapMirror 和 MetroCluster 最大的差別？","圖 11 的 SnapMirror 是 volume 層級、依 schedule 送 snapshot 的變動（另有 SnapMirror Synchronous，仍是 volume 層級）；MetroCluster 的寫入要 NVRAM 同步 mirror 到兩站才回覆 client，aggregate 由 SyncMirror 在兩站各放一個 plex，災難時整站 switchover。"],
+    ["情境：primary site 每小時做一次 SnapMirror 更新，上次更新在 10:00，10:50 整站失火。切到 DR site 後最多少掉多少資料？","大約 50 分鐘：10:00 那份 snapshot 之後的寫入還沒送出。這就是 RPO 大約等於 schedule 間隔的意思；要接近 0 就要用 SnapMirror Synchronous 或 MetroCluster。"],
   ]},
   {id:"g-tier", t:"FabricPool tiering", d:"很久沒用的資料，怎麼搬到便宜的 object storage，又不影響常用的資料？", figs:[
     ["fig5","圖 13 FabricPool · 四種 tiering policy","snapshot-only、auto、all、none 各搬哪些 block；cooling period 預設 2 天與 31 天，每日掃描後湊成 4 MB 物件上傳。","fig5-tiering/tiering"],
@@ -145,21 +171,25 @@ const GROUPS = [
   ], q:[
     ["預設的 tiering policy 是哪一個？它會搬 active file system 的 block 嗎？","snapshot-only。不會，它只搬 active file system 已不用、只剩 snapshot 參照的 block。"],
     ["auto policy 下，循序讀取 cloud tier 的資料會怎樣？","資料從 cloud tier 讀出，但不會拉回 performance tier；隨機讀取才會拉回。"],
+    ["情境：auto policy 的 volume 裡，一份報表 60 天沒人讀，今天備份軟體循序讀了整份。讀完後它在哪個 tier？","還在 cloud tier。它超過 31 天的 cooling period 早已被搬走；循序讀取不會把資料拉回 performance tier。"],
   ]},
   {id:"g-scale", t:"擴充與安全", d:"容量不夠時怎麼不停機長大？硬碟被偷或遇到 ransomware 時資料怎麼保住？", figs:[
     ["dc9","圖 15 scale-out · 加 HA pair 與 vol move","cluster 以 HA pair 為單位擴充；vol move 期間原 volume 照常服務，cutover 預設最多擋 30 秒。","dc9-scaleout/scaleout"],
     ["dc10","圖 16 NVE · KMIP · ARP","每個 volume 一把 XTS-AES-256 key，key 來自 KMIP 或 OKM；ARP 依 entropy、副檔名與 IOPS 偵測 ransomware。","dc10-security/security"],
   ], q:[
     ["vol move 期間 client 什麼時候會受影響？","只有 cutover 那一刻，預設最多擋住存取 30 秒；複製期間原 volume 照常服務。"],
-    ["硬碟被帶出機房，NVE 為什麼還能保護資料？","資料用每個 volume 的 XTS-AES-256 key 加密，key 放在 KMIP server或 OKM，不在硬碟上；沒有 key 只讀得到雜訊。"],
+    ["硬碟被帶出機房，NVE 為什麼還能保護資料？","資料用每個 volume 的 XTS-AES-256 key 加密，key 放在 KMIP server 或 OKM，不在硬碟上；沒有 key 只讀得到雜訊。"],
+    ["情境：把 vol1 vol move 到新加入的 HA pair，client 要改掛載路徑或改連 IP 嗎？","都不用。volume 在 SVM namespace 裡的 junction path 不變，client 連的還是 SVM 的 LIF；只有 cutover 那一刻可能短暫停頓。"],
   ]},
 ];
 
-/* 分組與圖 */
+/* 分組與圖；fig-N 錨點跟圖號一致（舊的 id 保留，已分享的連結才不會失效） */
+const fid = (t) => "fig-" + t.match(/^圖 (\d+)/)[1];
+document.getElementById("figol").innerHTML = GROUPS.flatMap(g=>g.figs).map(([id,t])=>`<li><a href="#${fid(t)}">${t.replace(/^圖 \d+ /,"")}</a></li>`).join("");
 document.getElementById("toc").innerHTML = `<a href="#gloss" onclick="document.getElementById('gloss').open=true">速查</a>` + GROUPS.map(g=>`<a href="#${g.id}">${g.t}</a>`).join("");
 document.getElementById("groups").innerHTML = GROUPS.map(g=>`<section id="${g.id}"><h2>${g.t}</h2><p>${g.d}</p>${
-  g.figs.map(([id,t,d,src,extra])=>`<div class="fig" id="${id}"><h3>${t}${TURN.has(id)?' <span class="tag">可旋轉</span>':""}</h3><p>${d}</p><p class="meta"><a data-open="${src}" target="_blank" rel="noopener">開新分頁看大圖 ↗</a>${extra?`　·　<a data-open="${extra[1]}" target="_blank" rel="noopener">${extra[0]} ↗</a>`:""}</p><iframe scrolling="no" title="${t}" data-src="${src}" loading="lazy"></iframe></div>`).join("")
-}<details class="quiz"><summary>自我檢查</summary>${g.q.map(([q,a])=>`<p><b>${q}</b><br>${a}</p>`).join("")}</details></section>`).join("");
+  g.figs.map(([id,t,d,src,extra])=>`<div class="fig" id="${id}"><a class="anchor" id="${fid(t)}"></a><h3>${t}${TURN.has(id)?' <span class="tag">可旋轉</span>':""}<a class="hash" href="#${fid(t)}" aria-label="這張圖的連結">#</a></h3><p>${d}</p><p class="meta"><a data-open="${src}" target="_blank" rel="noopener">單獨開啟 ↗</a>${extra?`　·　<a data-open="${extra[1]}" target="_blank" rel="noopener">${extra[0]} ↗</a>`:""}</p><iframe scrolling="no" title="${t}" data-src="${src}" loading="lazy"></iframe></div>`).join("")
+}<details class="quiz"><summary>自我檢查</summary>${g.q.map(([q,a])=>`<p><b>${q}</b></p><details class="ans"><summary>看答案</summary><p>${a}</p></details>`).join("")}</details></section>`).join("");
 
 /* 主題：沒有紀錄時跟隨系統 */
 let light;
